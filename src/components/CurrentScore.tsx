@@ -1,14 +1,10 @@
 interface CurrentScoreProps {
-    player: string;
     score: number;
 }
 
-const CurrentScore = ({ player, score }: CurrentScoreProps) => {
+const CurrentScore = ({ score }: CurrentScoreProps) => {
     return (
-        <div className="text-center p-2">
-            <h2 className="text-2xl font-bold">{player}</h2>
-            <p className="text-xl">{score}</p>
-        </div>
+        <p className="text-2xl font-semibold bg-white rounded-xl p-2">Total Runs: {score}</p>
     );
 };
 

@@ -29,18 +29,18 @@ const Game = () => {
             if (runValue === 'W') {
                 setCurrentPlayer(2);
             } else {
-                setPlayer1Score(prevScore => prevScore === "0" ? runValue : prevScore + runValue);
+                setPlayer1Score(prevScore => prevScore === "0" ? runValue + " " : prevScore + runValue + " ");
                 setPlayer1Total(prevTotal => prevTotal + parseInt(runValue));
             }
         } else {
             if (runValue === 'W') {
-                if (player2Total >= player1Total) {
+                if (player2Total > player1Total) {
                     setWinner('Player 2');
                 } else {
                     setWinner('Player 1');
                 }
             } else {
-                setPlayer2Score(prevScore => prevScore === "0" ? runValue : prevScore + runValue);
+                setPlayer2Score(prevScore => prevScore === "0" ? runValue + " " : prevScore + runValue + " ");
                 setPlayer2Total(prevTotal => {
                     const newTotal = prevTotal + parseInt(runValue);
                     if (newTotal >= parseInt(player1Score)) {
@@ -76,13 +76,13 @@ const Game = () => {
                     <Player title="Player 1" />
                     <Player title="Player 2" />
                 </div>
+                <div className='items-start flex justify-between pb-4 pr-4 pl-4'>
+                    <CurrentScore score={player1Total} />
+                    <CurrentScore score={player2Total} />
+                </div>
                 <div className='items-end flex justify-between px-4'>
                     <ScoreBoard title={player1Score} />
                     <ScoreBoard title={player2Score} />
-                </div>
-                <div className='items-start flex justify-between p-4'>
-                    <CurrentScore player="Player 1" score={player1Total} />
-                    <CurrentScore player="Player 2" score={player2Total} />
                 </div>
                 <div className='flex flex-col items-center text-5xl font-semibold'>
                     {winner ? `${winner} wins!` : `Player ${currentPlayer} turn`}
