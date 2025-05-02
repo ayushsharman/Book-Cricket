@@ -2,7 +2,7 @@ import { useState } from 'react';
 import PlayButton from '../components/PlayButton';
 import Player from '../components/Player';
 import ScoreBoard from '../components/ScoreBoard';
-import CurrentScore from '../components/CurrentScore'; // Import the new component
+import CurrentScore from '../components/CurrentScore';
 import bookCricketLogo from '../assets/book cricket.png';
 import { getRandomRun } from '../utils/score_calculator';
 
@@ -15,61 +15,101 @@ const runs = [
     { run: 'W', weight: 1 }
 ];
 
+const MAX_OVERS = 10;
+const BALLS_PER_OVER = 6;
+const MAX_WICKETS = 2;
+
+const getInitialPlayerState = () => ({
+    runs: 0,
+    wickets: 0,
+    balls: 0,
+    overs: 0,
+    perBall: [] as string[],
+});
+
 const Game = () => {
-    const [player1Score, setPlayer1Score] = useState("0"); 
-    const [player2Score, setPlayer2Score] = useState("0"); 
-    const [player1Total, setPlayer1Total] = useState(0); 
-    const [player2Total, setPlayer2Total] = useState(0); 
+    const [player1, setPlayer1] = useState(getInitialPlayerState());
+    const [player2, setPlayer2] = useState(getInitialPlayerState());
     const [currentPlayer, setCurrentPlayer] = useState(1);
-    const [lastRuns, setLastRuns] = useState("0");
-    const [winner, setWinner] = useState(null as string | null);
+    const [lastRuns, setLastRuns] = useState('0');
+    const [winner, setWinner] = useState<string | null>(null);
+    const [animate, setAnimate] = useState<'boundary' | 'wicket' | null>(null);
+
+    const isInningsOver = (player: typeof player1) =>
+        player.wickets >= MAX_WICKETS || player.overs >= MAX_OVERS;
 
     const handleMatch = () => {
-    if (winner) {
-        resetGame();
-        return;
-    }
-    
-    const runValue = getRandomRun(runs);
-    setLastRuns(runValue);
-
-    if (currentPlayer === 1) {
-        if (runValue === 'W') {
-            setCurrentPlayer(2);
-        } else {
-            setPlayer1Score(prevScore => prevScore === "0" ? runValue + " " : prevScore + runValue + " ");
-            setPlayer1Total(prevTotal => prevTotal + parseInt(runValue));
+        if (winner) {
+            resetGame();
+            return;
         }
-    } else {
-        if (runValue === 'W') {
-            if (player2Total > player1Total) {
-                setWinner('Player 2');
+
+        const runValue = getRandomRun(runs);
+        setLastRuns(runValue);
+
+        if (currentPlayer === 1) {
+            let { runs, wickets, balls, overs, perBall } = { ...player1 };
+            if (runValue === 'W') {
+                wickets += 1;
+                perBall = [...perBall, 'W'];
+                setAnimate('wicket');
             } else {
-                setWinner('Player 1');
+                runs += parseInt(runValue);
+                perBall = [...perBall, runValue];
+                if (runValue === '4' || runValue === '6') setAnimate('boundary');
+            }
+            balls += 1;
+            if (balls === BALLS_PER_OVER) {
+                overs += 1;
+                balls = 0;
+            }
+            setPlayer1({ runs, wickets, balls, overs, perBall });
+            if (wickets >= MAX_WICKETS || (overs === MAX_OVERS && balls === 0)) {
+                setCurrentPlayer(2);
             }
         } else {
-            setPlayer2Score(prevScore => prevScore === "0" ? runValue + " " : prevScore + runValue + " ");
-            setPlayer2Total(prevTotal => {
-                const newTotal = prevTotal + parseInt(runValue);
-                if (newTotal > player1Total) {
-                    setWinner('Player 2');
-                }
-                return newTotal;
-            });
+            let { runs, wickets, balls, overs, perBall } = { ...player2 };
+            let matchEnded = false;
+            if (runValue === 'W') {
+                wickets += 1;
+                perBall = [...perBall, 'W'];
+                setAnimate('wicket');
+            } else {
+                runs += parseInt(runValue);
+                perBall = [...perBall, runValue];
+                if (runValue === '4' || runValue === '6') setAnimate('boundary');
+            }
+            balls += 1;
+            if (balls === BALLS_PER_OVER) {
+                overs += 1;
+                balls = 0;
+            }
+            if (runs > player1.runs) {
+                setPlayer2({ runs, wickets, balls, overs, perBall });
+                setWinner('Player 2');
+                matchEnded = true;
+            }
+            if (!matchEnded && (wickets >= MAX_WICKETS || (overs === MAX_OVERS && balls === 0))) {
+                setPlayer2({ runs, wickets, balls, overs, perBall });
+                if (runs === player1.runs) setWinner('Draw');
+                else if (runs < player1.runs) setWinner('Player 1');
+                else setWinner('Player 2');
+                matchEnded = true;
+            }
+            if (!matchEnded) {
+                setPlayer2({ runs, wickets, balls, overs, perBall });
+            }
         }
-    }
-};
-
-    
+        setTimeout(() => setAnimate(null), 1000);
+    };
 
     const resetGame = () => {
-        setPlayer1Score("0");
-        setPlayer2Score("0");
-        setPlayer1Total(0);
-        setPlayer2Total(0);
+        setPlayer1(getInitialPlayerState());
+        setPlayer2(getInitialPlayerState());
         setCurrentPlayer(1);
-        setLastRuns("0");
-        setWinner(null as string | null);
+        setLastRuns('0');
+        setWinner(null);
+        setAnimate(null);
     };
 
     return (
@@ -77,35 +117,42 @@ const Game = () => {
             <div
                 className="absolute inset-0 bg-cover bg-center"
                 style={{ backgroundImage: 'url(https://t3.ftcdn.net/jpg/00/77/81/02/360_F_77810263_zgIAUTTlwF0Bl8ZCxHsofgTzXlZXy9Nn.jpg)' }}
-            >
-            </div>
+            ></div>
 
-            <div className="relative h-full flex flex-col">
-                <div className='items-start flex justify-between p-4'>
-                    <Player title="Player 1" />
-                    <Player title="Player 2" />
+            <div className="relative h-full flex flex-col justify-between">
+                <div className="flex flex-col items-center pt-4">
+                    <div className="flex flex-col md:flex-row w-full justify-center gap-4">
+                        <ScoreBoard
+                            runs={player1.runs}
+                            wickets={player1.wickets}
+                            overs={player1.overs}
+                            balls={player1.balls}
+                            perBall={player1.perBall}
+                            animate={currentPlayer === 1 ? animate : null}
+                            isCurrent={currentPlayer === 1 && !winner}
+                            playerName="Player 1"
+                        />
+                        <ScoreBoard
+                            runs={player2.runs}
+                            wickets={player2.wickets}
+                            overs={player2.overs}
+                            balls={player2.balls}
+                            perBall={player2.perBall}
+                            animate={currentPlayer === 2 ? animate : null}
+                            isCurrent={currentPlayer === 2 && !winner}
+                            playerName="Player 2"
+                        />
+                    </div>
                 </div>
-                <div className='items-start flex justify-between pb-4 pr-4 pl-4'>
-                    <CurrentScore score={player1Total} />
-                    <CurrentScore score={player2Total} />
+                <div className="flex flex-col items-center mt-6">
+                    <div className={`text-5xl font-semibold mb-2 ${animate === 'boundary' ? 'text-yellow-500 animate-bounce' : ''} ${animate === 'wicket' ? 'text-red-500 animate-pulse' : ''}`}>
+                        {winner ? (winner === 'Draw' ? 'Match Drawn!' : `${winner} wins!`) : `Player ${currentPlayer} turn`}
+                    </div>
+                    <div className={`flex items-center justify-center text-9xl font-extrabold transition-all duration-300 ${animate === 'boundary' ? 'text-green-500 animate-bounce' : ''} ${animate === 'wicket' ? 'text-red-600 animate-pulse' : ''}`}>{lastRuns}</div>
                 </div>
-                <div className='items-end flex justify-between px-4'>
-                    <ScoreBoard title={player1Score} />
-                    <ScoreBoard title={player2Score} />
-                </div>
-                <div className='flex flex-col items-center text-5xl font-semibold'>
-                    {winner ? `${winner} wins!` : `Player ${currentPlayer} turn`}
-                </div>
-                <br />
-                <br />
-                <br />
-                <div className='flex items-center justify-center text-9xl font-semibold'>{lastRuns}</div>
-                <br />
-                <br />
-                <br />
-                <br />
-                <div className='flex flex-col items-center'>
+                <div className="flex flex-col items-center mb-8">
                     <PlayButton onClick={handleMatch} />
+                    <div className="mt-2 text-gray-600 text-sm">{winner ? 'Click Play to restart!' : 'Tap Play for next ball'}</div>
                 </div>
             </div>
             <footer className="absolute bottom-0 right-0 p-4">

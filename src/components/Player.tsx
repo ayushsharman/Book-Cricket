@@ -1,4 +1,3 @@
-
 interface PlayerProps {
     title: string;
 }
