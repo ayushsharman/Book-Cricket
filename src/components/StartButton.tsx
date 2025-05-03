@@ -5,7 +5,7 @@ const StartButton = () => {
   const navigate = useNavigate();
 
   const handleStartGame = () => {
-    navigate('/game');
+    navigate('/menu');
   };
 
   return (
