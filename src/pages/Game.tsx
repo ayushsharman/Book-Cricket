@@ -6,6 +6,7 @@ import ScoreBoard from '../components/ScoreBoard';
 import bookCricketLogo from '../assets/book cricket.png';
 import { getRandomRun } from '../utils/score_calculator';
 import { BatsmanStats } from '../components/PlayerStats';
+import { BowlerStatistics } from '../components/BowlerStats';
 
 const runs = [
     { run: '1', weight: 5 },
@@ -74,14 +75,64 @@ const getInitialPakistanBatsmen = (maxOvers: number) => {
     }
 };
 
+// Get initial bowlers based on match format
+const getInitialBowlers = (maxOvers: number, isIndianBowlers: boolean) => {
+    const players = isIndianBowlers ? PAKISTAN_PLAYERS : INDIA_PLAYERS;
+    
+    // Always have at least 2 bowlers
+    const numBowlers = maxOvers <= 2 ? 2 : maxOvers <= 5 ? 3 : 4;
+    
+    const bowlers: BowlerStatistics[] = [];
+    
+    for (let i = 0; i < numBowlers; i++) {
+        bowlers.push({
+            name: players[i],
+            overs: 0,
+            balls: 0,
+            runs: 0,
+            wickets: 0,
+            economy: 0,
+            isBowling: i === 0 // First bowler starts bowling
+        });
+    }
+    
+    return bowlers;
+};
+
 const getInitialPlayerState = (maxOvers: number, isIndia: boolean) => ({
     runs: 0,
     wickets: 0,
     balls: 0,
     overs: 0,
     perBall: [] as string[],
-    batsmen: isIndia ? getInitialBatsmen(maxOvers) : getInitialPakistanBatsmen(maxOvers)
+    batsmen: isIndia ? getInitialBatsmen(maxOvers) : getInitialPakistanBatsmen(maxOvers),
+    bowlers: isIndia ? getInitialBowlers(maxOvers, false) : getInitialBowlers(maxOvers, true) // Opposite team bowls
 });
+
+// Calculate economy rate
+const calculateEconomy = (runs: number, overs: number, balls: number): number => {
+    if (overs === 0 && balls === 0) return 0;
+    const totalOvers = overs + (balls / BALLS_PER_OVER);
+    return runs / totalOvers;
+};
+
+// Function to rotate bowlers at the end of an over
+const rotateBowlers = (bowlers: BowlerStatistics[]): BowlerStatistics[] => {
+    const updated = [...bowlers];
+    
+    // Find current bowler
+    const currentBowlerIndex = updated.findIndex(b => b.isBowling);
+    if (currentBowlerIndex === -1) return updated; // Safety check
+    
+    // Set current bowler to not bowling
+    updated[currentBowlerIndex].isBowling = false;
+    
+    // Find next bowler (simple rotation for now)
+    const nextBowlerIndex = (currentBowlerIndex + 1) % updated.length;
+    updated[nextBowlerIndex].isBowling = true;
+    
+    return updated;
+};
 
 // Define the type for the expected state
 interface GameSettings {
@@ -202,29 +253,45 @@ const Game = () => {
         setLastRuns(runValue);
 
         if (currentPlayer === 1) {
-            let { runs, wickets, balls, overs, perBall, batsmen } = { ...player1 };
-            let updatedBatsmen = [...batsmen];
+            // Make copies of the current state to work with
+            const updatedPlayer1 = { ...player1 };
+            const updatedPlayer2 = { ...player2 };
+            let updatedBatsmen = [...updatedPlayer1.batsmen];
+            let updatedBowlers = [...updatedPlayer2.bowlers];
             
             // Find the current striker
-            const strikerIndex = batsmen.findIndex((b: { isOnStrike: any; }) => b.isOnStrike);
+            const strikerIndex = updatedBatsmen.findIndex(b => b.isOnStrike);
             if (strikerIndex === -1) return; // Safety check
             
+            // Find the current bowler
+            const currentBowlerIndex = updatedBowlers.findIndex(b => b.isBowling);
+            if (currentBowlerIndex === -1) return; // Safety check
+            
+            // Update batting and bowling stats
             if (runValue === 'W') {
-                wickets += 1;
-                perBall = [...perBall, 'W'];
+                updatedPlayer1.wickets += 1;
+                updatedPlayer1.perBall = [...updatedPlayer1.perBall, 'W'];
                 setAnimate('wicket');
                 
                 // Update batsman stats and bring in next batsman
                 updatedBatsmen[strikerIndex].balls += 1;
                 updatedBatsmen = bringNextBatsmanIn(updatedBatsmen);
+                
+                // Update bowler stats - wicket taken
+                updatedBowlers[currentBowlerIndex].wickets += 1;
+                updatedBowlers[currentBowlerIndex].balls += 1;
             } else {
                 const runsScored = parseInt(runValue);
-                runs += runsScored;
-                perBall = [...perBall, runValue];
+                updatedPlayer1.runs += runsScored;
+                updatedPlayer1.perBall = [...updatedPlayer1.perBall, runValue];
                 
                 // Update batsman stats
                 updatedBatsmen[strikerIndex].runs += runsScored;
                 updatedBatsmen[strikerIndex].balls += 1;
+                
+                // Update bowler stats - runs conceded
+                updatedBowlers[currentBowlerIndex].runs += runsScored;
+                updatedBowlers[currentBowlerIndex].balls += 1;
                 
                 if (runValue === '4' || runValue === '6') {
                     setAnimate('boundary');
@@ -236,49 +303,91 @@ const Game = () => {
                 }
             }
             
-            balls += 1;
-            if (balls === BALLS_PER_OVER) {
-                overs += 1;
-                balls = 0;
+            updatedPlayer1.balls += 1;
+            if (updatedPlayer1.balls === BALLS_PER_OVER) {
+                updatedPlayer1.overs += 1;
+                updatedPlayer1.balls = 0;
+                
+                // Update bowler's overs
+                updatedBowlers[currentBowlerIndex].overs += 1;
+                updatedBowlers[currentBowlerIndex].balls = 0;
+                
+                // Calculate economy rate for the bowler
+                updatedBowlers[currentBowlerIndex].economy = calculateEconomy(
+                    updatedBowlers[currentBowlerIndex].runs,
+                    updatedBowlers[currentBowlerIndex].overs,
+                    updatedBowlers[currentBowlerIndex].balls
+                );
+                
+                // Rotate bowlers at the end of the over
+                updatedBowlers = rotateBowlers(updatedBowlers);
+                
                 // Rotate strike at the end of the over
-                if (wickets < maxWickets) {
+                if (updatedPlayer1.wickets < maxWickets) {
                     updatedBatsmen = rotateStrike(updatedBatsmen);
                 }
+            } else {
+                // Update economy for current bowler after each ball
+                updatedBowlers[currentBowlerIndex].economy = calculateEconomy(
+                    updatedBowlers[currentBowlerIndex].runs,
+                    updatedBowlers[currentBowlerIndex].overs,
+                    updatedBowlers[currentBowlerIndex].balls
+                );
             }
             
-            setPlayer1({ runs, wickets, balls, overs, perBall, batsmen: updatedBatsmen });
+            // Update player states
+            updatedPlayer1.batsmen = updatedBatsmen;
+            updatedPlayer2.bowlers = updatedBowlers;
+            setPlayer1(updatedPlayer1);
+            setPlayer2(updatedPlayer2);
 
             // Check if innings is over
-            if (wickets >= maxWickets || (overs === maxOvers && balls === 0)) {
+            if (updatedPlayer1.wickets >= maxWickets || (updatedPlayer1.overs === maxOvers && updatedPlayer1.balls === 0)) {
                 setCurrentPlayer(2);
                 setAnimate(null); // Reset animation when switching innings
                 setLastRuns('0'); // Reset last run display
             }
-        } else { // Current Player 2
-            let { runs, wickets, balls, overs, perBall, batsmen } = { ...player2 };
+        } else { // Current Player 2 (Pakistan batting)
+            // Make copies of the current state to work with
+            const updatedPlayer1 = { ...player1 };
+            const updatedPlayer2 = { ...player2 };
+            let updatedBatsmen = [...updatedPlayer2.batsmen];
+            let updatedBowlers = [...updatedPlayer1.bowlers];
             let matchEnded = false;
-            let updatedBatsmen = [...batsmen];
             
             // Find the current striker
-            const strikerIndex = batsmen.findIndex((b: { isOnStrike: any; }) => b.isOnStrike);
+            const strikerIndex = updatedBatsmen.findIndex(b => b.isOnStrike);
             if (strikerIndex === -1) return; // Safety check
             
+            // Find the current bowler
+            const currentBowlerIndex = updatedBowlers.findIndex(b => b.isBowling);
+            if (currentBowlerIndex === -1) return; // Safety check
+            
+            // Update batting and bowling stats
             if (runValue === 'W') {
-                wickets += 1;
-                perBall = [...perBall, 'W'];
+                updatedPlayer2.wickets += 1;
+                updatedPlayer2.perBall = [...updatedPlayer2.perBall, 'W'];
                 setAnimate('wicket');
                 
                 // Update batsman stats and bring in next batsman
                 updatedBatsmen[strikerIndex].balls += 1;
                 updatedBatsmen = bringNextBatsmanIn(updatedBatsmen);
+                
+                // Update bowler stats - wicket taken
+                updatedBowlers[currentBowlerIndex].wickets += 1;
+                updatedBowlers[currentBowlerIndex].balls += 1;
             } else {
                 const runsScored = parseInt(runValue);
-                runs += runsScored;
-                perBall = [...perBall, runValue];
+                updatedPlayer2.runs += runsScored;
+                updatedPlayer2.perBall = [...updatedPlayer2.perBall, runValue];
                 
                 // Update batsman stats
                 updatedBatsmen[strikerIndex].runs += runsScored;
                 updatedBatsmen[strikerIndex].balls += 1;
+                
+                // Update bowler stats - runs conceded
+                updatedBowlers[currentBowlerIndex].runs += runsScored;
+                updatedBowlers[currentBowlerIndex].balls += 1;
                 
                 if (runValue === '4' || runValue === '6') {
                     setAnimate('boundary');
@@ -290,35 +399,64 @@ const Game = () => {
                 }
             }
             
-            balls += 1;
-            if (balls === BALLS_PER_OVER) {
-                overs += 1;
-                balls = 0;
+            updatedPlayer2.balls += 1;
+            if (updatedPlayer2.balls === BALLS_PER_OVER) {
+                updatedPlayer2.overs += 1;
+                updatedPlayer2.balls = 0;
+                
+                // Update bowler's overs
+                updatedBowlers[currentBowlerIndex].overs += 1;
+                updatedBowlers[currentBowlerIndex].balls = 0;
+                
+                // Calculate economy rate for the bowler
+                updatedBowlers[currentBowlerIndex].economy = calculateEconomy(
+                    updatedBowlers[currentBowlerIndex].runs,
+                    updatedBowlers[currentBowlerIndex].overs,
+                    updatedBowlers[currentBowlerIndex].balls
+                );
+                
+                // Rotate bowlers at the end of the over
+                updatedBowlers = rotateBowlers(updatedBowlers);
+                
                 // Rotate strike at the end of the over
-                if (wickets < maxWickets) {
+                if (updatedPlayer2.wickets < maxWickets) {
                     updatedBatsmen = rotateStrike(updatedBatsmen);
                 }
+            } else {
+                // Update economy for current bowler after each ball
+                updatedBowlers[currentBowlerIndex].economy = calculateEconomy(
+                    updatedBowlers[currentBowlerIndex].runs,
+                    updatedBowlers[currentBowlerIndex].overs,
+                    updatedBowlers[currentBowlerIndex].balls
+                );
             }
+            
+            // Update player states with the new batsmen and bowlers data
+            updatedPlayer2.batsmen = updatedBatsmen;
+            updatedPlayer1.bowlers = updatedBowlers;
 
             // Check win condition first
-            if (runs > player1.runs) {
-                setPlayer2({ runs, wickets, balls, overs, perBall, batsmen: updatedBatsmen }); // Update state first
+            if (updatedPlayer2.runs > updatedPlayer1.runs) {
+                setPlayer1(updatedPlayer1);
+                setPlayer2(updatedPlayer2);
                 setWinner('Pakistan');
                 matchEnded = true;
             }
 
             // Check end of innings or other win/draw conditions
-            if (!matchEnded && (wickets >= maxWickets || (overs === maxOvers && balls === 0))) {
-                setPlayer2({ runs, wickets, balls, overs, perBall, batsmen: updatedBatsmen }); // Update state first
-                if (runs === player1.runs) setWinner('Draw');
-                else if (runs < player1.runs) setWinner('India');
+            if (!matchEnded && (updatedPlayer2.wickets >= maxWickets || (updatedPlayer2.overs === maxOvers && updatedPlayer2.balls === 0))) {
+                setPlayer1(updatedPlayer1);
+                setPlayer2(updatedPlayer2);
+                if (updatedPlayer2.runs === updatedPlayer1.runs) setWinner('Draw');
+                else if (updatedPlayer2.runs < updatedPlayer1.runs) setWinner('India');
                 else setWinner('Pakistan');
                 matchEnded = true;
             }
-
-            // Update state if match hasn't ended
+            
+            // If the match hasn't ended, update the state
             if (!matchEnded) {
-                setPlayer2({ runs, wickets, balls, overs, perBall, batsmen: updatedBatsmen });
+                setPlayer1(updatedPlayer1);
+                setPlayer2(updatedPlayer2);
             }
         }
 
@@ -369,6 +507,8 @@ const Game = () => {
                             playerName="India"
                             teamName="India"
                             batsmen={player1.batsmen}
+                            bowlers={player2.bowlers}
+                            showBowlingStats={currentPlayer === 1 || !winner}
                         />
                         <ScoreBoard
                             runs={player2.runs}
@@ -381,7 +521,9 @@ const Game = () => {
                             playerName="Pakistan"
                             teamName="Pakistan"
                             batsmen={player2.batsmen}
+                            bowlers={player1.bowlers}
                             target={currentPlayer === 2 ? player1.runs + 1 : undefined}
+                            showBowlingStats={currentPlayer === 2 || !winner}
                         />
                     </div>
                 </div>
@@ -396,7 +538,7 @@ const Game = () => {
                     <PlayButton onClick={handleMatch} />
                     <div className="mt-2 text-gray-600 text-sm">{winner ? 'Click Play to restart!' : 'Tap Play for next ball'}</div>
                      <button
-                         onClick={() => navigate('/')}
+                         onClick={() => navigate('/menu')}
                          className="mt-4 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded text-sm transition-all"
                      >
                          Back to Menu

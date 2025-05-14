@@ -1,4 +1,3 @@
-// src/components/PlayerStats.tsx
 import React from 'react';
 
 export interface BatsmanStats {
@@ -16,7 +15,7 @@ interface PlayerStatsProps {
 
 const PlayerStats: React.FC<PlayerStatsProps> = ({ batsmen, teamName }) => {
     return (
-        <div className="w-full bg-gray-50 rounded p-2 mt-2">
+        <div className="w-full bg-gray-50 rounded p-2">
             <h3 className="text-sm font-semibold mb-1">{teamName} Batting</h3>
             <div className="space-y-1">
                 {batsmen.map((batsman, idx) => (
