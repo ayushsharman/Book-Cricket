@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import {PrismaClient} from '../backend/generated/prisma/index.js';
 import dotenv from 'dotenv';
-
+import routes from '../backend/routes/routes.js';
 dotenv.config();
 
 const PORT = process.env.PORT || 3000
@@ -16,6 +16,9 @@ app.use(express.json())
 app.get("/", (req, res) => {
     res.send("Server Health: GOOD")
 })
+
+
+app.use('/', routes)
 
 
 app.listen(PORT, ()=> {
