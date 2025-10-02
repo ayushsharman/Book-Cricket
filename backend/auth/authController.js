@@ -1,36 +1,36 @@
-import {PrismaClient} from '../generated/prisma/index.js';
-
+// auth.js
+import { PrismaClient } from "../generated/prisma/index.js";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
-export const signup = async (req, res) => {
+export const auth = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ error: "User already exists" });
+    // 1. Check if user exists
+    let user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      // If not found → create new user
+      const hashedPassword = await bcrypt.hash(password, 10);
+      user = await prisma.user.create({
+        data: { email, password: hashedPassword },
+      });
+      console.log("✅ New user created:", email);
+    } else {
+      // If exists → check password
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      console.log("✅ User logged in:", email);
     }
 
-    const user = await prisma.user.create({
-      data: { email, password },
-    });
-
-    res.json(user);
+    // Don't send back password
+    const { password: _, ...safeUser } = user;
+    res.json(safeUser);
   } catch (err) {
-    console.log(err);
+    console.error(err);
     res.status(500).json({ error: "Internal server error" });
   }
 };
-
-
-export const login = async (req, res) => {
-    const { email, password } = req.body;
-    const user = await prisma.user.findUnique({ where: { email } });
-
-    console.log("hogya bhai login");
-
-    if (!user || user.password !== password) {
-        return res.status(401).json({ error: "Invalid credentials" });
-    }
-    res.json(user);
-}

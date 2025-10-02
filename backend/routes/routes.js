@@ -1,9 +1,10 @@
 import express, {Router} from 'express';
-import * as authController from  '../auth/authController.js';
+import {auth} from  '../auth/authController.js';
+import matchRoutes from '../match/matchRoutes.js';
 
 const router = Router();
 
-router.post('/signup', authController.signup)
-router.post('/login', authController.login)
+router.post('/auth', auth)
+router.use('/matches', matchRoutes);
 
 export default router;

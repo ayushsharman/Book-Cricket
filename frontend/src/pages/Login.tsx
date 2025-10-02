@@ -14,7 +14,7 @@ const Login = () => {
     setError("");
 
     try {
-      const res = await fetch("http://localhost:3000/login", {
+      const res = await fetch("http://localhost:3000/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -27,7 +27,7 @@ const Login = () => {
         return;
       }
 
-      // Save user session (for now localStorage)
+      // Save user session
       localStorage.setItem("user", JSON.stringify(data));
       localStorage.removeItem("guest");
 
@@ -36,6 +36,7 @@ const Login = () => {
       setError("Something went wrong, try again.");
     }
   };
+
 
   return (
     <div className="relative h-screen">
