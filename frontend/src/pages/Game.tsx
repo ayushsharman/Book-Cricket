@@ -157,7 +157,7 @@ const Game = () => {
     const [maxOvers, setMaxOvers] = useState<number | null>(null);
     const [maxWickets, setMaxWickets] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true); // Loading state
-    const [userId, setUserId] = useState<number>(4); 
+    const [userId, setUserId] = useState<number>(1); 
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [matchSaved, setMatchSaved] = useState(false);

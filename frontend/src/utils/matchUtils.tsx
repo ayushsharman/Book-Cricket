@@ -1,7 +1,38 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/utils/matchUtils.ts
-import { MatchData, ScoreData } from '../services/api';
 import { BatsmanStats } from '../components/PlayerStats';
+
+// Updated interface to match new schema
+export interface ScoreData {
+  player: string;
+  team: string;
+  runs: number;
+  balls: number;
+}
+
+export interface MatchData {
+  userId: number;
+  matchType: string;
+  result: string;
+  
+  // Team 1 (India) stats
+  team1Name: string;
+  team1Runs: number;
+  team1Wickets: number;
+  team1Overs: number;
+  
+  // Team 2 (Pakistan) stats
+  team2Name: string;
+  team2Runs: number;
+  team2Wickets: number;
+  team2Overs: number;
+  
+  // Match metadata
+  totalOvers: number;
+  maxWickets: number;
+  
+  scores: ScoreData[];
+}
 
 export const formatMatchData = (
   userId: number,
@@ -18,21 +49,21 @@ export const formatMatchData = (
   else if (maxOvers <= 5) matchType = 'Medium Match';
   else matchType = 'Full Match';
 
-  // Determine result
+  // Determine result with score details
   let result = '';
   if (winner === 'Draw') {
-    result = 'Draw';
+    result = `Match Drawn - India: ${player1.runs}/${player1.wickets}, Pakistan: ${player2.runs}/${player2.wickets}`;
   } else if (winner === 'India') {
-    result = 'India Won';
+    const margin = player1.runs - player2.runs;
+    result = `India Won by ${margin} runs`;
   } else if (winner === 'Pakistan') {
-    result = 'Pakistan Won';
+    const wicketsRemaining = maxWickets - player2.wickets;
+    result = `Pakistan Won by ${wicketsRemaining} wickets`;
   }
 
-  // Get the batting team's final score
-  const battingTeam = currentPlayer === 2 ? player2 : player1;
-  const totalRuns = battingTeam.runs;
-  const wicketsLost = battingTeam.wickets;
-  const oversPlayed = battingTeam.overs + (battingTeam.balls / 6);
+  // Calculate overs for each team
+  const team1Overs = player1.overs + (player1.balls / 6);
+  const team2Overs = player2.overs + (player2.balls / 6);
 
   // Format batsmen scores - only include batsmen who played
   const scores: ScoreData[] = [];
@@ -41,7 +72,8 @@ export const formatMatchData = (
   player1.batsmen.forEach((batsman: BatsmanStats) => {
     if (batsman.balls > 0) {
       scores.push({
-        player: `${batsman.name} (IND)`,
+        player: batsman.name,
+        team: 'India',
         runs: batsman.runs,
         balls: batsman.balls,
       });
@@ -52,7 +84,8 @@ export const formatMatchData = (
   player2.batsmen.forEach((batsman: BatsmanStats) => {
     if (batsman.balls > 0) {
       scores.push({
-        player: `${batsman.name} (PAK)`,
+        player: batsman.name,
+        team: 'Pakistan',
         runs: batsman.runs,
         balls: batsman.balls,
       });
@@ -63,9 +96,23 @@ export const formatMatchData = (
     userId,
     matchType,
     result,
-    totalRuns,
-    wicketsLost,
-    oversPlayed: Math.round(oversPlayed * 10) / 10, // Round to 1 decimal
+    
+    // Team 1 (India) stats
+    team1Name: 'India',
+    team1Runs: player1.runs,
+    team1Wickets: player1.wickets,
+    team1Overs: Math.round(team1Overs * 10) / 10,
+    
+    // Team 2 (Pakistan) stats
+    team2Name: 'Pakistan',
+    team2Runs: player2.runs,
+    team2Wickets: player2.wickets,
+    team2Overs: Math.round(team2Overs * 10) / 10,
+    
+    // Match metadata
+    totalOvers: maxOvers,
+    maxWickets: maxWickets,
+    
     scores,
   };
 };

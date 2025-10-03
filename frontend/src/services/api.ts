@@ -3,6 +3,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 
 export interface ScoreData {
   player: string;
+  team: string;
   runs: number;
   balls: number;
 }
@@ -11,10 +12,30 @@ export interface MatchData {
   userId: number;
   matchType: string;
   result: string;
-  totalRuns: number;
-  wicketsLost: number;
-  oversPlayed: number;
+  
+  // Team 1 (India) stats
+  team1Name: string;
+  team1Runs: number;
+  team1Wickets: number;
+  team1Overs: number;
+  
+  // Team 2 (Pakistan) stats
+  team2Name: string;
+  team2Runs: number;
+  team2Wickets: number;
+  team2Overs: number;
+  
+  // Match metadata
+  totalOvers: number;
+  maxWickets: number;
+  
   scores: ScoreData[];
+}
+
+export interface User {
+  id: number;
+  email: string;
+  createdAt: string;
 }
 
 export const saveMatch = async (matchData: MatchData) => {
@@ -28,7 +49,8 @@ export const saveMatch = async (matchData: MatchData) => {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to save match: ${response.statusText}`);
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Failed to save match: ${response.statusText}`);
     }
 
     return await response.json();
