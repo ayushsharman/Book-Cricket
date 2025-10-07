@@ -24,7 +24,7 @@ const runs = [
 
 const BALLS_PER_OVER = 6;
 
-// Define Indian and Pakistani players
+
 const INDIA_PLAYERS = ['Virat Kohli', 'Rohit Sharma', 'MS Dhoni', 'Shubman Gill'];
 const PAKISTAN_PLAYERS = ['Babar Azam', 'Mohammad Rizwan', 'Shaheen Afridi', 'Fakhar Zaman'];
 

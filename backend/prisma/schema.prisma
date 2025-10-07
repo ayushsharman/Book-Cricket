@@ -53,3 +53,16 @@ model PlayerScore {
   matchId  Int
   match    Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
 }
+
+
+model PlayerStats {
+  id     Int    @id @default(autoincrement())
+  player String
+  team   String
+  runs   Int    @default(0)
+  balls  Int    @default(0)
+  matches Int   @default(0)
+  strikeRate Float @default(0.0)
+
+  @@unique([player, team]) // ensures one record per player per team
+}
