@@ -121,7 +121,6 @@ export const createMatch = async (req, res) => {
   }
 };
 
-// 📊 Get Player Stats (with Strike Rate)
 export const getPlayerStats = async (req, res) => {
   try {
     const stats = await prisma.playerStats.findMany();
@@ -158,32 +157,3 @@ export const getUserMatches = async (req, res) => {
   }
 };
 
-// Create a test user endpoint
-export const createTestUser = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    });
-
-    if (existingUser) {
-      return res.status(200).json({
-        message: "User already exists",
-        user: existingUser
-      });
-    }
-
-    const user = await prisma.user.create({
-      data: {
-        email: email || 'testuser@example.com',
-        password: password || 'password123',
-      }
-    });
-
-    res.status(201).json(user);
-  } catch (err) {
-    console.error("Error creating user:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-};
