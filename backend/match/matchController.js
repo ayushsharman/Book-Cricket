@@ -121,14 +121,24 @@ export const createMatch = async (req, res) => {
   }
 };
 
+// in your controller file (matchController.js / matchesController.js)
 export const getPlayerStats = async (req, res) => {
   try {
     const stats = await prisma.playerStats.findMany();
 
-    const enrichedStats = stats.map(s => ({
-      ...s,
-      strikeRate: s.balls > 0 ? ((s.runs / s.balls) * 100).toFixed(2) : "0.00"
-    }));
+    // Return explicit fields and numeric strikeRate
+    const enrichedStats = stats.map((s) => {
+      const strikeRate = s.balls > 0 ? Number(((s.runs / s.balls) * 100).toFixed(2)) : 0;
+      return {
+        id: s.id,
+        player: s.player,
+        team: s.team,
+        runs: s.runs,
+        balls: s.balls,
+        matches: s.matches ?? 0,
+        strikeRate, // number
+      };
+    });
 
     res.json(enrichedStats);
   } catch (err) {
@@ -136,6 +146,7 @@ export const getPlayerStats = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
 
 // Get all matches for a user
 export const getUserMatches = async (req, res) => {

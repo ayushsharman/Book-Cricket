@@ -4,6 +4,7 @@ import Game from './pages/Game';
 import Landing from './pages/Landing';
 import Menu from './components/Menu';
 import Login from './pages/Login'; 
+import Stats from './components/Stats';
 
 const App: React.FC = () => {
   return (
@@ -13,6 +14,7 @@ const App: React.FC = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/menu" element={<Menu />} />
         <Route path="/game" element={<Game />} />
+        <Route path="/stats" element={<Stats />} />
       </Routes>
     </Router>
   );
