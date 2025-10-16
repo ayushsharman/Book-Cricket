@@ -147,6 +147,71 @@ export const getPlayerStats = async (req, res) => {
   }
 };
 
+// 📊 Get single match stats (scorecard view)
+export const getMatchStats = async (req, res) => {
+  try {
+    const { matchId } = req.params;
+
+    const match = await prisma.match.findUnique({
+      where: { id: Number(matchId) },
+      include: {
+        scores: {
+          orderBy: { runs: "desc" },
+        },
+        user: {
+          select: { id: true, email: true },
+        },
+      },
+    });
+
+    if (!match) {
+      return res.status(404).json({ error: "Match not found" });
+    }
+
+    // Format data for frontend (group by team)
+    const team1Scores = match.scores.filter((s) => s.team === match.team1Name);
+    const team2Scores = match.scores.filter((s) => s.team === match.team2Name);
+
+    const formatted = {
+      id: match.id,
+      matchType: match.matchType,
+      result: match.result,
+      totalOvers: match.totalOvers,
+      maxWickets: match.maxWickets,
+      team1: {
+        name: match.team1Name,
+        runs: match.team1Runs,
+        wickets: match.team1Wickets,
+        overs: match.team1Overs,
+        players: team1Scores.map((p) => ({
+          player: p.player,
+          runs: p.runs,
+          balls: p.balls,
+          strikeRate: p.balls > 0 ? ((p.runs / p.balls) * 100).toFixed(2) : "0.00",
+        })),
+      },
+      team2: {
+        name: match.team2Name,
+        runs: match.team2Runs,
+        wickets: match.team2Wickets,
+        overs: match.team2Overs,
+        players: team2Scores.map((p) => ({
+          player: p.player,
+          runs: p.runs,
+          balls: p.balls,
+          strikeRate: p.balls > 0 ? ((p.runs / p.balls) * 100).toFixed(2) : "0.00",
+        })),
+      },
+      createdAt: match.createdAt,
+    };
+
+    res.json(formatted);
+  } catch (err) {
+    console.error("Error fetching match stats:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
 
 // Get all matches for a user
 export const getUserMatches = async (req, res) => {

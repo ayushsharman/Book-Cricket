@@ -15,7 +15,7 @@ type Player = {
 
 type SortKey = "runs" | "strikeRate";
 
-const Stats: React.FC = () => {
+const PlayerStats: React.FC = () => {
     const [players, setPlayers] = useState<Player[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -109,7 +109,7 @@ const Stats: React.FC = () => {
 
             {/* Back Button */}
             <button
-                onClick={() => navigate("/menu")}
+                onClick={() => navigate("/stats")}
                 className="absolute top-6 left-6 bg-gray-900/70 hover:bg-yellow-400 hover:text-black text-white px-4 py-2 rounded-lg transition-all z-10 border border-yellow-500/50"
             >
                 ← Back
@@ -197,4 +197,4 @@ const Stats: React.FC = () => {
     );
 };
 
-export default Stats;
+export default PlayerStats;
