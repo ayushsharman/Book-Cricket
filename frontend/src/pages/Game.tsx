@@ -1,5 +1,5 @@
 // src/pages/Game.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PlayButton from '../components/PlayButton';
 import ScoreBoard from '../components/ScoreBoard';
@@ -7,12 +7,21 @@ import bookCricketLogo from '../assets/book cricket.png';
 import { getRandomRun } from '../utils/score_calculator';
 import { BatsmanStats } from '../components/PlayerStats';
 import { BowlerStatistics } from '../components/BowlerStats';
-import { saveMatch } from '../services/api';
+import { saveMatchData } from '../services/matchData';
 import { formatMatchData } from '../utils/matchUtils';
+import {
+    BALLS_PER_OVER,
+    getInitialPlayerState,
+    rotateBowlers,
+    calculateEconomy,
+    rotateStrike,
+    bringNextBatsmanIn,
+} from '../utils/gameUtils';
 
 
 
 
+// runs are defined in utils/gameUtils if needed elsewhere; local runs array kept for component-specific use
 const runs = [
     { run: '1', weight: 5 },
     { run: '2', weight: 4 },
@@ -22,122 +31,11 @@ const runs = [
     { run: 'W', weight: 1 }
 ];
 
-const BALLS_PER_OVER = 6;
 
-
-const INDIA_PLAYERS = ['Virat Kohli', 'Rohit Sharma', 'MS Dhoni', 'Shubman Gill'];
-const PAKISTAN_PLAYERS = ['Babar Azam', 'Mohammad Rizwan', 'Shaheen Afridi', 'Fakhar Zaman'];
+// Player pools are defined in utils/gameUtils if needed elsewhere
 
 // Get initial batsmen based on match format
-const getInitialBatsmen = (maxOvers: number) => {
-    if (maxOvers <= 2) {
-        // For 2 over matches, only 2 batsmen
-        return [
-            { name: INDIA_PLAYERS[0], runs: 0, balls: 0, isOnStrike: true },
-            { name: INDIA_PLAYERS[1], runs: 0, balls: 0 }
-        ];
-    } else if (maxOvers <= 5) {
-        // For medium length matches, 3 batsmen
-        return [
-            { name: INDIA_PLAYERS[0], runs: 0, balls: 0, isOnStrike: true },
-            { name: INDIA_PLAYERS[1], runs: 0, balls: 0 },
-            { name: INDIA_PLAYERS[2], runs: 0, balls: 0 }
-        ];
-    } else {
-        // For long matches, all 4 batsmen
-        return [
-            { name: INDIA_PLAYERS[0], runs: 0, balls: 0, isOnStrike: true },
-            { name: INDIA_PLAYERS[1], runs: 0, balls: 0 },
-            { name: INDIA_PLAYERS[2], runs: 0, balls: 0 },
-            { name: INDIA_PLAYERS[3], runs: 0, balls: 0 }
-        ];
-    }
-};
-
-// Get initial Pakistan batsmen based on match format
-const getInitialPakistanBatsmen = (maxOvers: number) => {
-    if (maxOvers <= 2) {
-        // For 2 over matches, only 2 batsmen
-        return [
-            { name: PAKISTAN_PLAYERS[0], runs: 0, balls: 0, isOnStrike: true },
-            { name: PAKISTAN_PLAYERS[1], runs: 0, balls: 0 }
-        ];
-    } else if (maxOvers <= 5) {
-        // For medium length matches, 3 batsmen
-        return [
-            { name: PAKISTAN_PLAYERS[0], runs: 0, balls: 0, isOnStrike: true },
-            { name: PAKISTAN_PLAYERS[1], runs: 0, balls: 0 },
-            { name: PAKISTAN_PLAYERS[2], runs: 0, balls: 0 }
-        ];
-    } else {
-        // For long matches, all 4 batsmen
-        return [
-            { name: PAKISTAN_PLAYERS[0], runs: 0, balls: 0, isOnStrike: true },
-            { name: PAKISTAN_PLAYERS[1], runs: 0, balls: 0 },
-            { name: PAKISTAN_PLAYERS[2], runs: 0, balls: 0 },
-            { name: PAKISTAN_PLAYERS[3], runs: 0, balls: 0 }
-        ];
-    }
-};
-
-// Get initial bowlers based on match format
-const getInitialBowlers = (maxOvers: number, isIndianBowlers: boolean) => {
-    const players = isIndianBowlers ? PAKISTAN_PLAYERS : INDIA_PLAYERS;
-
-    // Always have at least 2 bowlers
-    const numBowlers = maxOvers <= 2 ? 2 : maxOvers <= 5 ? 3 : 4;
-
-    const bowlers: BowlerStatistics[] = [];
-
-    for (let i = 0; i < numBowlers; i++) {
-        bowlers.push({
-            name: players[i],
-            overs: 0,
-            balls: 0,
-            runs: 0,
-            wickets: 0,
-            economy: 0,
-            isBowling: i === 0 // First bowler starts bowling
-        });
-    }
-
-    return bowlers;
-};
-
-const getInitialPlayerState = (maxOvers: number, isIndia: boolean) => ({
-    runs: 0,
-    wickets: 0,
-    balls: 0,
-    overs: 0,
-    perBall: [] as string[],
-    batsmen: isIndia ? getInitialBatsmen(maxOvers) : getInitialPakistanBatsmen(maxOvers),
-    bowlers: isIndia ? getInitialBowlers(maxOvers, false) : getInitialBowlers(maxOvers, true) // Opposite team bowls
-});
-
-// Calculate economy rate
-const calculateEconomy = (runs: number, overs: number, balls: number): number => {
-    if (overs === 0 && balls === 0) return 0;
-    const totalOvers = overs + (balls / BALLS_PER_OVER);
-    return runs / totalOvers;
-};
-
-// Function to rotate bowlers at the end of an over
-const rotateBowlers = (bowlers: BowlerStatistics[]): BowlerStatistics[] => {
-    const updated = [...bowlers];
-
-    // Find current bowler
-    const currentBowlerIndex = updated.findIndex(b => b.isBowling);
-    if (currentBowlerIndex === -1) return updated; // Safety check
-
-    // Set current bowler to not bowling
-    updated[currentBowlerIndex].isBowling = false;
-
-    // Find next bowler (simple rotation for now)
-    const nextBowlerIndex = (currentBowlerIndex + 1) % updated.length;
-    updated[nextBowlerIndex].isBowling = true;
-
-    return updated;
-};
+// Utility functions moved to `src/utils/gameUtils.ts`
 
 
 // Define the type for the expected state
@@ -157,7 +55,7 @@ const Game = () => {
     const [maxOvers, setMaxOvers] = useState<number | null>(null);
     const [maxWickets, setMaxWickets] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true); // Loading state
-    const [userId, setUserId] = useState<number>(1); 
+    const [userId] = useState<number>(1); 
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [matchSaved, setMatchSaved] = useState(false);
@@ -175,8 +73,18 @@ const Game = () => {
         }
     }, [gameSettings, navigate]); // Depend on gameSettings and navigate
 
-    const [player1, setPlayer1] = useState<any>(null); // Will be initialized in useEffect
-    const [player2, setPlayer2] = useState<any>(null); // Will be initialized in useEffect
+    interface PlayerState {
+        runs: number;
+        wickets: number;
+        balls: number;
+        overs: number;
+        perBall: string[];
+        batsmen: BatsmanStats[];
+        bowlers: BowlerStatistics[];
+    }
+
+    const [player1, setPlayer1] = useState<PlayerState | null>(null); // Will be initialized in useEffect
+    const [player2, setPlayer2] = useState<PlayerState | null>(null); // Will be initialized in useEffect
     const [currentPlayer, setCurrentPlayer] = useState(1);
     const [lastRuns, setLastRuns] = useState('0');
     const [winner, setWinner] = useState<string | null>(null);
@@ -190,19 +98,7 @@ const Game = () => {
         }
     }, [maxOvers]);
 
-    useEffect(() => {
-        if (winner && !matchSaved) {
-            handleSaveMatch();
-        }
-    }, [winner, matchSaved]);
-
-    // --- Update isInningsOver to use state variables (ensure they are not null) ---
-    const isInningsOver = (player: any) => {
-        if (maxWickets === null || maxOvers === null) return false; // Not ready yet
-        return player.wickets >= maxWickets || player.overs >= maxOvers;
-    }
-
-    const handleSaveMatch = async () => {
+    const handleSaveMatch = useCallback(async () => {
         if (!winner || matchSaved || isSaving) return;
 
         setIsSaving(true);
@@ -219,7 +115,7 @@ const Game = () => {
                 currentPlayer
             );
 
-            await saveMatch(matchData);
+            await saveMatchData(matchData);
             setMatchSaved(true);
             console.log('Match saved successfully!');
         } catch (error) {
@@ -228,59 +124,24 @@ const Game = () => {
         } finally {
             setIsSaving(false);
         }
-    };
+    }, [winner, matchSaved, isSaving, userId, maxOvers, maxWickets, player1, player2, currentPlayer]);
 
-
-    // Function to rotate strike
-    const rotateStrike = (batsmen: BatsmanStats[]) => {
-        const updated = [...batsmen];
-
-        // Find current striker and non-striker
-        const strikerIndex = updated.findIndex(b => b.isOnStrike);
-        if (strikerIndex === -1) return updated; // Safety check
-
-        // Set current striker to not on strike
-        updated[strikerIndex].isOnStrike = false;
-
-        // Find first non-out batsman who isn't the striker to put on strike
-        for (let i = 0; i < updated.length; i++) {
-            if (i !== strikerIndex && !updated[i].isOut) {
-                updated[i].isOnStrike = true;
-                break;
-            }
+    useEffect(() => {
+        if (winner && !matchSaved) {
+            handleSaveMatch();
         }
+    }, [winner, matchSaved, handleSaveMatch]);
 
-        return updated;
-    };
+    // --- Update isInningsOver to use state variables (ensure they are not null) ---
+    const isInningsOver = (player: PlayerState | null) => {
+        if (maxWickets === null || maxOvers === null || !player) return false; // Not ready yet
+        return player.wickets >= maxWickets || player.overs >= maxOvers;
+    }
 
-    // Function to get the next batsman in when a wicket falls
-    const bringNextBatsmanIn = (batsmen: BatsmanStats[]) => {
-        const updated = [...batsmen];
+    
 
-        // Find current striker
-        const strikerIndex = updated.findIndex(b => b.isOnStrike);
-        if (strikerIndex === -1) return updated; // Safety check
 
-        // Mark current striker as out
-        updated[strikerIndex].isOnStrike = false;
-        updated[strikerIndex].isOut = true;
-
-        // Find the next available batsman
-        let nextBatsmanIndex = -1;
-        for (let i = 0; i < updated.length; i++) {
-            if (!updated[i].isOut && !updated[i].isOnStrike) {
-                nextBatsmanIndex = i;
-                break;
-            }
-        }
-
-        // If found, put them on strike
-        if (nextBatsmanIndex !== -1) {
-            updated[nextBatsmanIndex].isOnStrike = true;
-        }
-
-        return updated;
-    };
+    // strike rotation helpers moved to utils/gameUtils
 
     const handleMatch = () => {
         // Ensure settings are loaded before allowing play
