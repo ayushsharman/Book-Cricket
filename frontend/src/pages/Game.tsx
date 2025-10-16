@@ -1,10 +1,11 @@
 // src/pages/Game.tsx
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import PlayButton from '../components/PlayButton';
+// PlayButton replaced by direct hit buttons in UI
 import ScoreBoard from '../components/ScoreBoard';
 import bookCricketLogo from '../assets/book cricket.png';
 import { getRandomRun } from '../utils/score_calculator';
+import { computeProbabilities } from '../utils/score_calculator';
 import { BatsmanStats } from '../components/PlayerStats';
 import { BowlerStatistics } from '../components/BowlerStats';
 import { saveMatchData } from '../services/matchData';
@@ -89,6 +90,8 @@ const Game = () => {
     const [lastRuns, setLastRuns] = useState('0');
     const [winner, setWinner] = useState<string | null>(null);
     const [animate, setAnimate] = useState<'boundary' | 'wicket' | null>(null);
+    const [isAnimating, setIsAnimating] = useState(false);
+    const [buttonProbs, setButtonProbs] = useState<{ run: string; weight: number; probability: number }[] | null>(null);
 
     // Initialize player states when maxOvers is available
     useEffect(() => {
@@ -143,7 +146,8 @@ const Game = () => {
 
     // strike rotation helpers moved to utils/gameUtils
 
-    const handleMatch = () => {
+    // preferredRun: if provided, user chose a target button ("1","2","4","6");
+    const handleMatch = (preferredRun?: string) => {
         // Ensure settings are loaded before allowing play
         if (isLoading || maxOvers === null || maxWickets === null || !player1 || !player2) {
             console.warn("Game settings not loaded yet.");
@@ -155,7 +159,38 @@ const Game = () => {
             return;
         }
 
-        const runValue = getRandomRun(runs);
+        // Nuanced biasing strategy:
+        // - Player chooses a shot (1/2/4/6). That choice increases probability for that outcome
+        // - It also slightly increases wicket chance for higher-risk shots (6 > 4 > 2 > 1)
+        // - Logic kept simple and deterministic via weight transforms (no pure luck)
+
+    const weighted = runs.map(r => ({ ...r }));
+
+        if (preferredRun) {
+            // base multiplier per shot: more aggressive shots get higher multiplier but also a wicket penalty
+            const multipliers: Record<string, number> = { '1': 1.2, '2': 1.5, '4': 2.5, '6': 4 };
+            const wicketPenaltyForShot: Record<string, number> = { '1': 0.8, '2': 0.9, '4': 1.2, '6': 1.5 };
+
+            for (const w of weighted) {
+                if (w.run === preferredRun) {
+                    w.weight = Math.max(1, Math.floor(w.weight * multipliers[preferredRun]));
+                }
+                // If run is 'W' (wicket), increase its weight slightly for aggressive shots
+                if (w.run === 'W') {
+                    w.weight = Math.max(1, Math.floor(w.weight * wicketPenaltyForShot[preferredRun]));
+                }
+            }
+        }
+
+        // Compute probabilities for UI display
+        const distribution = computeProbabilities(weighted);
+        // Save distribution to state for showing percentages on UI
+    setButtonProbs(distribution);
+
+        // Visual animation start
+        setIsAnimating(true);
+
+        const runValue = getRandomRun(weighted);
         setLastRuns(runValue);
 
         if (currentPlayer === 1) {
@@ -369,7 +404,12 @@ const Game = () => {
 
         // Reset animation after a delay, only if not switching player immediately
         if (!(currentPlayer === 1 && isInningsOver(player1))) {
-            setTimeout(() => setAnimate(null), 1000);
+            setTimeout(() => {
+                setAnimate(null);
+                setIsAnimating(false);
+            }, 1000);
+        } else {
+            setTimeout(() => setIsAnimating(false), 500);
         }
     };
 
@@ -405,38 +445,39 @@ const Game = () => {
                     {maxOvers} Overs / {maxWickets} Wickets Match
                 </div>
 
-                <div className="flex flex-col items-center pt-10">
-                    <div className="flex flex-col md:flex-row w-full justify-center gap-4">
-                        <ScoreBoard
-                            runs={player1.runs}
-                            wickets={player1.wickets}
-                            overs={player1.overs}
-                            balls={player1.balls}
-                            perBall={player1.perBall}
-                            animate={currentPlayer === 1 ? animate : null}
-                            isCurrent={currentPlayer === 1 && !winner}
-                            playerName="India"
-                            teamName="India"
-                            batsmen={player1.batsmen}
-                            bowlers={player2.bowlers}
-                            showBowlingStats={currentPlayer === 1 || !winner}
-                        />
-                        <ScoreBoard
-                            runs={player2.runs}
-                            wickets={player2.wickets}
-                            overs={player2.overs}
-                            balls={player2.balls}
-                            perBall={player2.perBall}
-                            animate={currentPlayer === 2 ? animate : null}
-                            isCurrent={currentPlayer === 2 && !winner}
-                            playerName="Pakistan"
-                            teamName="Pakistan"
-                            batsmen={player2.batsmen}
-                            bowlers={player1.bowlers}
-                            target={currentPlayer === 2 ? player1.runs + 1 : undefined}
-                            showBowlingStats={currentPlayer === 2 || !winner}
-                        />
-                    </div>
+                {/* Scoreboards in corners to leave central area free for larger matches */}
+                <div className="absolute top-6 left-6 w-96">
+                    <ScoreBoard
+                        runs={player1.runs}
+                        wickets={player1.wickets}
+                        overs={player1.overs}
+                        balls={player1.balls}
+                        perBall={player1.perBall}
+                        animate={currentPlayer === 1 ? animate : null}
+                        isCurrent={currentPlayer === 1 && !winner}
+                        playerName="India"
+                        teamName="India"
+                        batsmen={player1.batsmen}
+                        bowlers={player2.bowlers}
+                        showBowlingStats={currentPlayer === 1 || !winner}
+                    />
+                </div>
+                <div className="absolute top-6 right-6 w-96">
+                    <ScoreBoard
+                        runs={player2.runs}
+                        wickets={player2.wickets}
+                        overs={player2.overs}
+                        balls={player2.balls}
+                        perBall={player2.perBall}
+                        animate={currentPlayer === 2 ? animate : null}
+                        isCurrent={currentPlayer === 2 && !winner}
+                        playerName="Pakistan"
+                        teamName="Pakistan"
+                        batsmen={player2.batsmen}
+                        bowlers={player1.bowlers}
+                        target={currentPlayer === 2 ? player1.runs + 1 : undefined}
+                        showBowlingStats={currentPlayer === 2 || !winner}
+                    />
                 </div>
                 <div className="flex flex-col items-center mt-6">
                     <div className={`text-4xl md:text-5xl font-semibold mb-2 text-center ${animate === 'boundary' ? 'text-yellow-500 animate-bounce' : ''} ${animate === 'wicket' ? 'text-red-500 animate-pulse' : ''}`}>
@@ -446,8 +487,29 @@ const Game = () => {
                     <div className={`flex items-center justify-center text-8xl md:text-9xl font-extrabold transition-all duration-300 ${animate === 'boundary' ? 'text-green-500 animate-bounce' : ''} ${animate === 'wicket' ? 'text-red-600 animate-pulse' : ''}`}>{lastRuns}</div>
                 </div>
                 <div className="flex flex-col items-center mb-8">
-                    <PlayButton onClick={handleMatch} />
-                    <div className="mt-2 text-gray-600 text-sm">{winner ? 'Click Play to restart!' : 'Tap Play for next ball'}</div>
+                    <div className="flex gap-6 items-center">
+                        {['1','2','4','6'].map(r => {
+                            const prob = buttonProbs?.find(b => b.run === r)?.probability ?? 0;
+                            return (
+                                <div key={r} className="flex flex-col items-center">
+                                    <button
+                                        onClick={() => handleMatch(r)}
+                                        disabled={isAnimating}
+                                        className={`bg-yellow-400 disabled:opacity-50 hover:bg-yellow-300 text-black font-bold py-3 px-6 rounded-full text-2xl shadow-lg ${isAnimating ? 'scale-95' : 'scale-100'}`}>
+                                        {r}
+                                    </button>
+                                    <div className="text-xs text-gray-200 mt-1">{Math.round(prob * 100)}%</div>
+                                </div>
+                            );
+                        })}
+                        <div className="flex flex-col items-center">
+                          <button onClick={() => handleMatch()} disabled={isAnimating} className="bg-gray-500 disabled:opacity-50 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full text-lg shadow-inner">
+                              Random
+                          </button>
+                          <div className="text-xs text-gray-200 mt-1">—</div>
+                        </div>
+                    </div>
+                    <div className="mt-2 text-gray-600 text-sm">{winner ? 'Click any to restart!' : 'Choose a hit for next ball'}</div>
                     {winner && (
                     <div className="mt-2 text-center">
                         {isSaving && (
