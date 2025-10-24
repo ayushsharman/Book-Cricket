@@ -42,7 +42,19 @@ const MatchStats: React.FC = () => {
   const [loadingMatchDetail, setLoadingMatchDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const userId = 1; // TODO: replace with real user ID from auth
+  // Read logged-in user id saved by Login (localStorage 'user')
+  const getStoredUserId = () => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return 1;
+      const parsed = JSON.parse(raw);
+      return parsed?.id ?? 1;
+    } catch (e) {
+      return 1;
+    }
+  };
+
+  const userId = getStoredUserId();
 
   useEffect(() => {
     const fetchMatches = async () => {

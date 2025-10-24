@@ -7,6 +7,7 @@ export interface AggregatedPlayerStats {
   team: string;
   runs: number;
   balls: number;
+  matches: number;
 }
 
 export const saveMatchData = async (matchData: MatchData) => {
@@ -20,10 +21,13 @@ export const aggregatePlayerStats = (matches: MatchData[]) => {
   matches.forEach(m => {
     m.scores.forEach((s: ScoreData) => {
       if (!stats[s.player]) {
-        stats[s.player] = { player: s.player, team: s.team, runs: 0, balls: 0 };
+        stats[s.player] = { player: s.player, team: s.team, runs: 0, balls: 0, matches: 0 };
       }
       stats[s.player].runs += s.runs;
       stats[s.player].balls += s.balls;
+      // Count this match for the player once per match
+      // We assume a player appears at most once in the scores array per match
+      stats[s.player].matches += 1;
     });
   });
 

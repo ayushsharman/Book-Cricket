@@ -56,7 +56,18 @@ const Game = () => {
     const [maxOvers, setMaxOvers] = useState<number | null>(null);
     const [maxWickets, setMaxWickets] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true); // Loading state
-    const [userId] = useState<number>(1); 
+    const getStoredUserId = () => {
+        try {
+            const raw = localStorage.getItem('user');
+            if (!raw) return 1;
+            const parsed = JSON.parse(raw);
+            return parsed?.id ?? 1;
+        } catch (e) {
+            return 1;
+        }
+    };
+
+    const [userId] = useState<number>(getStoredUserId());
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [matchSaved, setMatchSaved] = useState(false);

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import { getAggregatedStatsForUser, AggregatedPlayerStats } from "../services/matchData";
 import { ArrowUpDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -27,8 +27,24 @@ const PlayerStats: React.FC = () => {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const res = await axios.get("http://localhost:3000/matches/stats/players");
-                setPlayers(res.data);
+                // Try to get logged in user id from localStorage (fallback to 1)
+                const raw = localStorage.getItem('user');
+                let userId = 1;
+                if (raw) {
+                    try { userId = JSON.parse(raw)?.id ?? 1; } catch { userId = 1; }
+                }
+
+                const agg = await getAggregatedStatsForUser(userId);
+                // Map aggregated stats to the Player type expected by UI
+                const mapped = (agg as AggregatedPlayerStats[]).map((a) => ({
+                    player: a.player,
+                    team: a.team,
+                    matches: a.matches ?? 0,
+                    runs: a.runs ?? 0,
+                    balls: a.balls ?? 0,
+                    strikeRate: a.balls > 0 ? ((a.runs / a.balls) * 100).toFixed(2) : "0.00",
+                }));
+                setPlayers(mapped as Player[]);
             } catch (err) {
                 setError("Failed to load player stats. Please try again later.");
             } finally {

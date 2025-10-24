@@ -59,6 +59,7 @@ export const createMatch = async (req, res) => {
             team: s.team,
             runs: s.runs,
             balls: s.balls,
+            user: { connect: { id: userId } },
           })) || [],
         },
       },
@@ -80,9 +81,10 @@ export const createMatch = async (req, res) => {
       for (const s of scores) {
         await prisma.playerStats.upsert({
           where: {
-            player_team: {
+            player_team_userId: {
               player: s.player,
-              team: s.team
+              team: s.team,
+              userId: userId,
             }
           },
           update: {
@@ -98,6 +100,7 @@ export const createMatch = async (req, res) => {
             runs: s.runs,
             balls: s.balls,
             matches: 1,
+            user: { connect: { id: userId } }
           }
         });
 
@@ -124,7 +127,12 @@ export const createMatch = async (req, res) => {
 // in your controller file (matchController.js / matchesController.js)
 export const getPlayerStats = async (req, res) => {
   try {
-    const stats = await prisma.playerStats.findMany();
+    const { userId } = req.params;
+    const stats = await prisma.playerStats.findMany(
+      {
+        where: { userId: Number(userId) }
+      }
+    );
 
     // Return explicit fields and numeric strikeRate
     const enrichedStats = stats.map((s) => {
@@ -147,7 +155,6 @@ export const getPlayerStats = async (req, res) => {
   }
 };
 
-// 📊 Get single match stats (scorecard view)
 export const getMatchStats = async (req, res) => {
   try {
     const { matchId } = req.params;
