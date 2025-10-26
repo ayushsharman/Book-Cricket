@@ -4,8 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 // PlayButton replaced by direct hit buttons in UI
 import ScoreBoard from '../components/ScoreBoard';
 import bookCricketLogo from '../assets/book cricket.png';
-import { getRandomRun } from '../utils/score_calculator';
-import { computeProbabilities } from '../utils/score_calculator';
+import { getRandomRun, computeProbabilities, resetGameState, setStance } from '../utils/score_calculator';
 import { BatsmanStats } from '../components/PlayerStats';
 import { BowlerStatistics } from '../components/BowlerStats';
 import { saveMatchData } from '../services/matchData';
@@ -23,20 +22,8 @@ import {
 
 
 // runs are defined in utils/gameUtils if needed elsewhere; local runs array kept for component-specific use
-const runs = [
-    { run: '1', weight: 5 },
-    { run: '2', weight: 4 },
-    { run: '4', weight: 3 },
-    { run: '6', weight: 2 },
-    { run: '3', weight: 1 },
-    { run: 'W', weight: 1 }
-];
-
-
-// Player pools are defined in utils/gameUtils if needed elsewhere
-
-// Get initial batsmen based on match format
-// Utility functions moved to `src/utils/gameUtils.ts`
+// Available shot types - each has its own risk/reward profile in score_calculator.tsx
+const SHOT_TYPES = ['1', '2', '4', '6'];
 
 
 // Define the type for the expected state
@@ -102,7 +89,7 @@ const Game = () => {
     const [winner, setWinner] = useState<string | null>(null);
     const [animate, setAnimate] = useState<'boundary' | 'wicket' | null>(null);
     const [isAnimating, setIsAnimating] = useState(false);
-    const [buttonProbs, setButtonProbs] = useState<{ run: string; weight: number; probability: number }[] | null>(null);
+    const [buttonProbs, setButtonProbs] = useState<{ run: string; probability: number; description: string }[] | null>(null);
 
     // Initialize player states when maxOvers is available
     useEffect(() => {
@@ -157,8 +144,8 @@ const Game = () => {
 
     // strike rotation helpers moved to utils/gameUtils
 
-    // preferredRun: if provided, user chose a target button ("1","2","4","6");
-    const handleMatch = (preferredRun?: string) => {
+    // Handle when a player chooses a shot (1,2,4,6)
+    const handleMatch = (shotType?: string) => {
         // Ensure settings are loaded before allowing play
         if (isLoading || maxOvers === null || maxWickets === null || !player1 || !player2) {
             console.warn("Game settings not loaded yet.");
@@ -170,38 +157,35 @@ const Game = () => {
             return;
         }
 
-        // Nuanced biasing strategy:
-        // - Player chooses a shot (1/2/4/6). That choice increases probability for that outcome
-        // - It also slightly increases wicket chance for higher-risk shots (6 > 4 > 2 > 1)
-        // - Logic kept simple and deterministic via weight transforms (no pure luck)
+        // Set UI to animating state
+        setIsAnimating(true);
 
-    const weighted = runs.map(r => ({ ...r }));
+        // If player didn't choose a specific shot, pick a safe one (1 run attempt)
+        const chosenShot = shotType || '1';
+        
+        // Get the outcome based on the shot's risk/reward profile
+        const outcome = getRandomRun(chosenShot);
+        
+        // Update UI with result
+        setLastRuns(outcome);
+        
+        // Show probabilities for the chosen shot in the UI
+        const probabilities = computeProbabilities(chosenShot);
+        setButtonProbs(probabilities);
 
-        if (preferredRun) {
-            // base multiplier per shot: more aggressive shots get higher multiplier but also a wicket penalty
-            const multipliers: Record<string, number> = { '1': 1.2, '2': 1.5, '4': 2.5, '6': 4 };
-            const wicketPenaltyForShot: Record<string, number> = { '1': 0.8, '2': 0.9, '4': 1.2, '6': 1.5 };
-
-            for (const w of weighted) {
-                if (w.run === preferredRun) {
-                    w.weight = Math.max(1, Math.floor(w.weight * multipliers[preferredRun]));
-                }
-                // If run is 'W' (wicket), increase its weight slightly for aggressive shots
-                if (w.run === 'W') {
-                    w.weight = Math.max(1, Math.floor(w.weight * wicketPenaltyForShot[preferredRun]));
-                }
-            }
+        // Apply animations
+        if (outcome === '4' || outcome === '6') {
+            setAnimate('boundary');
+        } else if (outcome === 'W') {
+            setAnimate('wicket');
+        } else {
+            setAnimate(null);
         }
-
-        // Compute probabilities for UI display
-        const distribution = computeProbabilities(weighted);
-        // Save distribution to state for showing percentages on UI
-    setButtonProbs(distribution);
 
         // Visual animation start
         setIsAnimating(true);
 
-        const runValue = getRandomRun(weighted);
+        const runValue = outcome;
         setLastRuns(runValue);
 
         if (currentPlayer === 1) {
@@ -424,6 +408,10 @@ const Game = () => {
         }
     };
 
+    // State for batting stance
+    const [stance, setCurrentStance] = useState<'normal' | 'aggressive' | 'defensive'>('normal');
+
+    // Reset both game state and UI
     const resetGame = () => {
         if (maxOvers === null) return;
 
@@ -434,9 +422,14 @@ const Game = () => {
         setWinner(null);
         setAnimate(null);
 
+        // Reset match state
         setMatchSaved(false);
         setSaveError(null);
         setIsSaving(false);
+
+        // Reset strategic elements
+        resetGameState();
+        setCurrentStance('normal');
     };
 
     // --- Render loading or the game ---
@@ -498,26 +491,61 @@ const Game = () => {
                     <div className={`flex items-center justify-center text-8xl md:text-9xl font-extrabold transition-all duration-300 ${animate === 'boundary' ? 'text-green-500 animate-bounce' : ''} ${animate === 'wicket' ? 'text-red-600 animate-pulse' : ''}`}>{lastRuns}</div>
                 </div>
                 <div className="flex flex-col items-center mb-8">
+                    {/* Stance selector */}
+                    <div className="flex gap-4 mb-4">
+                        {(['normal', 'defensive', 'aggressive'] as const).map(s => (
+                            <button
+                                key={s}
+                                onClick={() => {
+                                    setCurrentStance(s);
+                                    setStance(s);
+                                }}
+                                className={`px-4 py-1 rounded-full text-sm font-medium transition-all ${
+                                    stance === s 
+                                        ? 'bg-white text-black' 
+                                        : 'bg-black/30 text-white hover:bg-black/50'
+                                }`}
+                            >
+                                {s.charAt(0).toUpperCase() + s.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Shot buttons */}
                     <div className="flex gap-6 items-center">
-                        {['1','2','4','6'].map(r => {
-                            const prob = buttonProbs?.find(b => b.run === r)?.probability ?? 0;
+                        {['1','2','4','6'].map(shot => {
+                            const shotProbs = buttonProbs || computeProbabilities(shot);
+                            const hitProb = shotProbs.find(p => p.run === shot)?.probability ?? 0;
+                            const wicketProb = shotProbs.find(p => p.run === 'W')?.probability ?? 0;
+                            
                             return (
-                                <div key={r} className="flex flex-col items-center">
+                                <div key={shot} className="flex flex-col items-center">
                                     <button
-                                        onClick={() => handleMatch(r)}
+                                        onClick={() => handleMatch(shot)}
                                         disabled={isAnimating}
-                                        className={`bg-yellow-400 disabled:opacity-50 hover:bg-yellow-300 text-black font-bold py-3 px-6 rounded-full text-2xl shadow-lg ${isAnimating ? 'scale-95' : 'scale-100'}`}>
-                                        {r}
+                                        className={`group relative bg-yellow-400 disabled:opacity-50 hover:bg-yellow-300 text-black font-bold py-3 px-6 rounded-full text-2xl shadow-lg ${isAnimating ? 'scale-95' : 'scale-100'}`}>
+                                        {shot}
+                                        {/* Enhanced Risk/Reward tooltip */}
+                                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 p-2 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                            {shotProbs.map(p => p.description).join('\n')}
+                                        </div>
                                     </button>
-                                    <div className="text-xs text-gray-200 mt-1">{Math.round(prob * 100)}%</div>
+                                    {/* Two-line probability display */}
+                                    <div className="text-xs text-gray-200 mt-1 text-center">
+                                        <div className="text-green-400">{Math.round(hitProb * 100)}% hit</div>
+                                        <div className="text-red-400">{Math.round(wicketProb * 100)}% out</div>
+                                    </div>
                                 </div>
                             );
                         })}
                         <div className="flex flex-col items-center">
-                          <button onClick={() => handleMatch()} disabled={isAnimating} className="bg-gray-500 disabled:opacity-50 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full text-lg shadow-inner">
-                              Random
+                          <button 
+                            onClick={() => handleMatch('1')} 
+                            disabled={isAnimating} 
+                            className="bg-gray-500 disabled:opacity-50 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full text-lg shadow-inner">
+                              Safe
                           </button>
-                          <div className="text-xs text-gray-200 mt-1">—</div>
+                          <div className="text-xs text-gray-200 mt-1">Conservative</div>
                         </div>
                     </div>
                     <div className="mt-2 text-gray-600 text-sm">{winner ? 'Click any to restart!' : 'Choose a hit for next ball'}</div>
