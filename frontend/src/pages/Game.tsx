@@ -4,7 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 // PlayButton replaced by direct hit buttons in UI
 import ScoreBoard from '../components/ScoreBoard';
 import bookCricketLogo from '../assets/book cricket.png';
-import { getRandomRun, computeProbabilities, resetGameState, setStance } from '../utils/score_calculator';
+import { getRandomRun, computeProbabilities, getSpinnerSequence } from '../utils/score_calculator';
+import { useRef } from 'react';
 import { BatsmanStats } from '../components/PlayerStats';
 import { BowlerStatistics } from '../components/BowlerStats';
 import { saveMatchData } from '../services/matchData';
@@ -22,8 +23,7 @@ import {
 
 
 // runs are defined in utils/gameUtils if needed elsewhere; local runs array kept for component-specific use
-// Available shot types - each has its own risk/reward profile in score_calculator.tsx
-const SHOT_TYPES = ['1', '2', '4', '6'];
+// Available shot types are defined in UI below and in score_calculator
 
 
 // Define the type for the expected state
@@ -52,7 +52,7 @@ const Game = () => {
         } catch (e) {
             return 1;
         }
-    };
+    }
 
     const [userId] = useState<number>(getStoredUserId());
     const [isSaving, setIsSaving] = useState(false);
@@ -89,7 +89,10 @@ const Game = () => {
     const [winner, setWinner] = useState<string | null>(null);
     const [animate, setAnimate] = useState<'boundary' | 'wicket' | null>(null);
     const [isAnimating, setIsAnimating] = useState(false);
-    const [buttonProbs, setButtonProbs] = useState<{ run: string; probability: number; description: string }[] | null>(null);
+    const [isSpinning, setIsSpinning] = useState(false);
+    const [spinnerSeq, setSpinnerSeq] = useState<string[] | null>(null);
+    const [spinnerIndex, setSpinnerIndex] = useState(0);
+    const spinnerTimer = useRef<number | null>(null);
 
     // Initialize player states when maxOvers is available
     useEffect(() => {
@@ -144,8 +147,8 @@ const Game = () => {
 
     // strike rotation helpers moved to utils/gameUtils
 
-    // Handle when a player chooses a shot (1,2,4,6)
-    const handleMatch = (shotType?: string) => {
+    // Handle play button click: start/stop spinner
+    const handleMatch = () => {
         // Ensure settings are loaded before allowing play
         if (isLoading || maxOvers === null || maxWickets === null || !player1 || !player2) {
             console.warn("Game settings not loaded yet.");
@@ -157,41 +160,76 @@ const Game = () => {
             return;
         }
 
-        // Set UI to animating state
-        setIsAnimating(true);
-
-        // If player didn't choose a specific shot, pick a safe one (1 run attempt)
-        const chosenShot = shotType || '1';
-        
-        // Get the outcome based on the shot's risk/reward profile
-        const outcome = getRandomRun(chosenShot);
-        
-        // Update UI with result
-        setLastRuns(outcome);
-        
-        // Show probabilities for the chosen shot in the UI
-        const probabilities = computeProbabilities(chosenShot);
-        setButtonProbs(probabilities);
-
-        // Apply animations
-        if (outcome === '4' || outcome === '6') {
-            setAnimate('boundary');
-        } else if (outcome === 'W') {
-            setAnimate('wicket');
-        } else {
-            setAnimate(null);
+        // If already spinning, stop and resolve
+        if (isSpinning) {
+            stopSpinnerAndResolve();
+            return;
         }
 
-        // Visual animation start
-        setIsAnimating(true);
+        // Start spinner
+        const seq = getSpinnerSequence(40, 0.6);
+        setSpinnerSeq(seq);
+        setSpinnerIndex(0);
+        setIsSpinning(true);
 
-        const runValue = outcome;
-        setLastRuns(runValue);
+        // start visual timer
+        spinnerTimer.current = window.setInterval(() => {
+            setSpinnerIndex(i => (i + 1) % (seq.length || 1));
+        }, 180);  // Slower, more readable speed
+        return;
+    };
 
+    // Stop the spinner, determine final outcome (true distribution) and process it
+    const stopSpinnerAndResolve = () => {
+        if (!isSpinning) return;
+
+        // stop visual timer
+        if (spinnerTimer.current) {
+            window.clearInterval(spinnerTimer.current);
+            spinnerTimer.current = null;
+        }
+
+        setIsSpinning(false);
+
+        // final result from the true distribution
+        const finalOutcome = getRandomRun();
+
+        // set visible stopped value
+        setLastRuns(finalOutcome);
+
+        // apply same processing as before by calling handleMatch with a special flag
+        // We'll reuse the existing logic by directly setting outcome and proceeding.
+        // To avoid duplicating the large block above, call a small wrapper that
+        // simulates immediate resolution by setting a temporary shotType and
+        // then executing the rest of the logic synchronously.
+
+        // Reuse the existing flow by temporarily calling the inner processing
+        // The simplest approach is to call a small helper that contains the
+        // per-ball processing. We'll implement it inline here by invoking the
+        // same code path: by setting a local variable and executing the block.
+        const runValue = finalOutcome;
+
+        // Apply animations for the resolved outcome
+        if (runValue === '4' || runValue === '6') setAnimate('boundary');
+        else if (runValue === 'W') setAnimate('wicket');
+        else setAnimate(null);
+
+        // replicate the per-ball processing from above
+        // For brevity we call handleMatchResolve which encapsulates that logic
+        handleMatchResolve(runValue);
+
+        // reset spinner state
+        setSpinnerSeq(null);
+        setSpinnerIndex(0);
+    };
+
+    // Process the outcome of a ball
+    function handleMatchResolve(runValue: string) {
+        // keep the same code as the main body but extracted into a function
         if (currentPlayer === 1) {
             // Make copies of the current state to work with
-            const updatedPlayer1 = { ...player1 };
-            const updatedPlayer2 = { ...player2 };
+            const updatedPlayer1 = { ...(player1 as PlayerState) } as PlayerState;
+            const updatedPlayer2 = { ...(player2 as PlayerState) } as PlayerState;
             let updatedBatsmen = [...updatedPlayer1.batsmen];
             let updatedBowlers = [...updatedPlayer2.bowlers];
 
@@ -259,7 +297,7 @@ const Game = () => {
                 updatedBowlers = rotateBowlers(updatedBowlers);
 
                 // Rotate strike at the end of the over
-                if (updatedPlayer1.wickets < maxWickets) {
+                if (updatedPlayer1.wickets < maxWickets!) {
                     updatedBatsmen = rotateStrike(updatedBatsmen);
                 }
             } else {
@@ -278,38 +316,32 @@ const Game = () => {
             setPlayer2(updatedPlayer2);
 
             // Check if innings is over
-            if (updatedPlayer1.wickets >= maxWickets || (updatedPlayer1.overs === maxOvers && updatedPlayer1.balls === 0)) {
+            if (updatedPlayer1.wickets >= maxWickets! || (updatedPlayer1.overs === maxOvers! && updatedPlayer1.balls === 0)) {
                 setCurrentPlayer(2);
                 setAnimate(null); // Reset animation when switching innings
                 setLastRuns('0'); // Reset last run display
             }
-        } else { // Current Player 2 (Pakistan batting)
-            // Make copies of the current state to work with
-            const updatedPlayer1 = { ...player1 };
-            const updatedPlayer2 = { ...player2 };
+        } else {
+            // Current Player 2 (Pakistan batting) - mirror logic
+            const updatedPlayer1 = { ...(player1 as PlayerState) } as PlayerState;
+            const updatedPlayer2 = { ...(player2 as PlayerState) } as PlayerState;
             let updatedBatsmen = [...updatedPlayer2.batsmen];
             let updatedBowlers = [...updatedPlayer1.bowlers];
             let matchEnded = false;
 
-            // Find the current striker
             const strikerIndex = updatedBatsmen.findIndex(b => b.isOnStrike);
-            if (strikerIndex === -1) return; // Safety check
-
-            // Find the current bowler
+            if (strikerIndex === -1) return;
             const currentBowlerIndex = updatedBowlers.findIndex(b => b.isBowling);
-            if (currentBowlerIndex === -1) return; // Safety check
+            if (currentBowlerIndex === -1) return;
 
-            // Update batting and bowling stats
             if (runValue === 'W') {
                 updatedPlayer2.wickets += 1;
                 updatedPlayer2.perBall = [...updatedPlayer2.perBall, 'W'];
                 setAnimate('wicket');
 
-                // Update batsman stats and bring in next batsman
                 updatedBatsmen[strikerIndex].balls += 1;
                 updatedBatsmen = bringNextBatsmanIn(updatedBatsmen);
 
-                // Update bowler stats - wicket taken
                 updatedBowlers[currentBowlerIndex].wickets += 1;
                 updatedBowlers[currentBowlerIndex].balls += 1;
             } else {
@@ -317,22 +349,14 @@ const Game = () => {
                 updatedPlayer2.runs += runsScored;
                 updatedPlayer2.perBall = [...updatedPlayer2.perBall, runValue];
 
-                // Update batsman stats
                 updatedBatsmen[strikerIndex].runs += runsScored;
                 updatedBatsmen[strikerIndex].balls += 1;
 
-                // Update bowler stats - runs conceded
                 updatedBowlers[currentBowlerIndex].runs += runsScored;
                 updatedBowlers[currentBowlerIndex].balls += 1;
 
-                if (runValue === '4' || runValue === '6') {
-                    setAnimate('boundary');
-                }
-
-                // Rotate strike for odd runs
-                if (runsScored % 2 === 1) {
-                    updatedBatsmen = rotateStrike(updatedBatsmen);
-                }
+                if (runValue === '4' || runValue === '6') setAnimate('boundary');
+                if (runsScored % 2 === 1) updatedBatsmen = rotateStrike(updatedBatsmen);
             }
 
             updatedPlayer2.balls += 1;
@@ -340,26 +364,18 @@ const Game = () => {
                 updatedPlayer2.overs += 1;
                 updatedPlayer2.balls = 0;
 
-                // Update bowler's overs
                 updatedBowlers[currentBowlerIndex].overs += 1;
                 updatedBowlers[currentBowlerIndex].balls = 0;
 
-                // Calculate economy rate for the bowler
                 updatedBowlers[currentBowlerIndex].economy = calculateEconomy(
                     updatedBowlers[currentBowlerIndex].runs,
                     updatedBowlers[currentBowlerIndex].overs,
                     updatedBowlers[currentBowlerIndex].balls
                 );
 
-                // Rotate bowlers at the end of the over
                 updatedBowlers = rotateBowlers(updatedBowlers);
-
-                // Rotate strike at the end of the over
-                if (updatedPlayer2.wickets < maxWickets) {
-                    updatedBatsmen = rotateStrike(updatedBatsmen);
-                }
+                if (updatedPlayer2.wickets < maxWickets!) updatedBatsmen = rotateStrike(updatedBatsmen);
             } else {
-                // Update economy for current bowler after each ball
                 updatedBowlers[currentBowlerIndex].economy = calculateEconomy(
                     updatedBowlers[currentBowlerIndex].runs,
                     updatedBowlers[currentBowlerIndex].overs,
@@ -367,21 +383,17 @@ const Game = () => {
                 );
             }
 
-            // Update player states with the new batsmen and bowlers data
             updatedPlayer2.batsmen = updatedBatsmen;
             updatedPlayer1.bowlers = updatedBowlers;
 
-            // Check win condition first
             if (updatedPlayer2.runs > updatedPlayer1.runs) {
                 setPlayer1(updatedPlayer1);
                 setPlayer2(updatedPlayer2);
                 setWinner('Pakistan');
-
                 matchEnded = true;
             }
 
-            // Check end of innings or other win/draw conditions
-            if (!matchEnded && (updatedPlayer2.wickets >= maxWickets || (updatedPlayer2.overs === maxOvers && updatedPlayer2.balls === 0))) {
+            if (!matchEnded && (updatedPlayer2.wickets >= maxWickets! || (updatedPlayer2.overs === maxOvers! && updatedPlayer2.balls === 0))) {
                 setPlayer1(updatedPlayer1);
                 setPlayer2(updatedPlayer2);
                 if (updatedPlayer2.runs === updatedPlayer1.runs) setWinner('Draw');
@@ -390,14 +402,13 @@ const Game = () => {
                 matchEnded = true;
             }
 
-            // If the match hasn't ended, update the state
             if (!matchEnded) {
                 setPlayer1(updatedPlayer1);
                 setPlayer2(updatedPlayer2);
             }
         }
 
-        // Reset animation after a delay, only if not switching player immediately
+        // Reset animation after a delay
         if (!(currentPlayer === 1 && isInningsOver(player1))) {
             setTimeout(() => {
                 setAnimate(null);
@@ -408,10 +419,7 @@ const Game = () => {
         }
     };
 
-    // State for batting stance
-    const [stance, setCurrentStance] = useState<'normal' | 'aggressive' | 'defensive'>('normal');
-
-    // Reset both game state and UI
+    // Reset the game state
     const resetGame = () => {
         if (maxOvers === null) return;
 
@@ -426,11 +434,7 @@ const Game = () => {
         setMatchSaved(false);
         setSaveError(null);
         setIsSaving(false);
-
-        // Reset strategic elements
-        resetGameState();
-        setCurrentStance('normal');
-    };
+    }
 
     // --- Render loading or the game ---
     if (isLoading || !player1 || !player2) {
@@ -441,16 +445,18 @@ const Game = () => {
         <div className="relative h-screen">
             <div
                 className="absolute inset-0 bg-cover bg-center"
-                style={{ backgroundImage: 'url(https://t3.ftcdn.net/jpg/00/77/81/02/360_F_77810263_zgIAUTTlwF0Bl8ZCxHsofgTzXlZXy9Nn.jpg)' }}
+                style={{ 
+                    backgroundImage: 'url(https://t3.ftcdn.net/jpg/00/77/81/02/360_F_77810263_zgIAUTTlwF0Bl8ZCxHsofgTzXlZXy9Nn.jpg)'
+                }}
             ></div>
             <div className="relative h-full flex flex-col justify-between">
                 {/* Game settings display */}
-                <div className="absolute top-2 left-2 bg-black bg-opacity-60 text-white p-2 rounded text-sm z-10">
+                <div className="absolute top-2 left-2 bg-black bg-opacity-60 text-white px-3 py-1 rounded text-sm z-10">
                     {maxOvers} Overs / {maxWickets} Wickets Match
                 </div>
 
                 {/* Scoreboards in corners to leave central area free for larger matches */}
-                <div className="absolute top-6 left-6 w-96">
+                <div className="absolute top-16 left-6 w-96">
                     <ScoreBoard
                         runs={player1.runs}
                         wickets={player1.wickets}
@@ -466,7 +472,7 @@ const Game = () => {
                         showBowlingStats={currentPlayer === 1 || !winner}
                     />
                 </div>
-                <div className="absolute top-6 right-6 w-96">
+                <div className="absolute top-16 right-6 w-96">
                     <ScoreBoard
                         runs={player2.runs}
                         wickets={player2.wickets}
@@ -483,103 +489,69 @@ const Game = () => {
                         showBowlingStats={currentPlayer === 2 || !winner}
                     />
                 </div>
-                <div className="flex flex-col items-center mt-6">
-                    <div className={`text-4xl md:text-5xl font-semibold mb-2 text-center ${animate === 'boundary' ? 'text-yellow-500 animate-bounce' : ''} ${animate === 'wicket' ? 'text-red-500 animate-pulse' : ''}`}>
-                        {winner ? (winner === 'Draw' ? 'Match Drawn!' : `${winner} wins!`)
-                            : (currentPlayer === 1 ? `India Batting` : `Pakistan Chasing ${player1.runs + 1}`)}
-                    </div>
-                    <div className={`flex items-center justify-center text-8xl md:text-9xl font-extrabold transition-all duration-300 ${animate === 'boundary' ? 'text-green-500 animate-bounce' : ''} ${animate === 'wicket' ? 'text-red-600 animate-pulse' : ''}`}>{lastRuns}</div>
-                </div>
-                <div className="flex flex-col items-center mb-8">
-                    {/* Stance selector */}
-                    <div className="flex gap-4 mb-4">
-                        {(['normal', 'defensive', 'aggressive'] as const).map(s => (
-                            <button
-                                key={s}
-                                onClick={() => {
-                                    setCurrentStance(s);
-                                    setStance(s);
-                                }}
-                                className={`px-4 py-1 rounded-full text-sm font-medium transition-all ${
-                                    stance === s 
-                                        ? 'bg-white text-black' 
-                                        : 'bg-black/30 text-white hover:bg-black/50'
-                                }`}
-                            >
-                                {s.charAt(0).toUpperCase() + s.slice(1)}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Shot buttons */}
-                    <div className="flex gap-6 items-center">
-                        {['1','2','4','6'].map(shot => {
-                            const shotProbs = buttonProbs || computeProbabilities(shot);
-                            const hitProb = shotProbs.find(p => p.run === shot)?.probability ?? 0;
-                            const wicketProb = shotProbs.find(p => p.run === 'W')?.probability ?? 0;
-                            
-                            return (
-                                <div key={shot} className="flex flex-col items-center">
-                                    <button
-                                        onClick={() => handleMatch(shot)}
-                                        disabled={isAnimating}
-                                        className={`group relative bg-yellow-400 disabled:opacity-50 hover:bg-yellow-300 text-black font-bold py-3 px-6 rounded-full text-2xl shadow-lg ${isAnimating ? 'scale-95' : 'scale-100'}`}>
-                                        {shot}
-                                        {/* Enhanced Risk/Reward tooltip */}
-                                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 p-2 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                            {shotProbs.map(p => p.description).join('\n')}
-                                        </div>
-                                    </button>
-                                    {/* Two-line probability display */}
-                                    <div className="text-xs text-gray-200 mt-1 text-center">
-                                        <div className="text-green-400">{Math.round(hitProb * 100)}% hit</div>
-                                        <div className="text-red-400">{Math.round(wicketProb * 100)}% out</div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                        <div className="flex flex-col items-center">
-                          <button 
-                            onClick={() => handleMatch('1')} 
-                            disabled={isAnimating} 
-                            className="bg-gray-500 disabled:opacity-50 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full text-lg shadow-inner">
-                              Safe
-                          </button>
-                          <div className="text-xs text-gray-200 mt-1">Conservative</div>
+                {/* Central game status and controls */}
+                <div className="flex flex-col items-center justify-center flex-grow">
+                    {/* Team and Score Display */}
+                    <div className="text-center mb-12">
+                        <div className={`text-6xl font-bold mb-6 ${
+                            animate === 'boundary' ? 'text-yellow-500 animate-bounce' : 
+                            animate === 'wicket' ? 'text-red-500 animate-pulse' : 'text-black'
+                        }`}>
+                            {winner 
+                                ? (winner === 'Draw' ? 'Match Drawn!' : `${winner} wins!`)
+                                : (currentPlayer === 1 
+                                    ? 'India Batting' 
+                                    : `Pakistan Needs ${player1.runs + 1 - player2.runs}`)
+                            }
+                        </div>
+                        <div className={`text-[10rem] font-bold transition-all duration-500 ease-out ${
+                            animate === 'boundary' ? 'text-green-500 animate-bounce' : 
+                            animate === 'wicket' ? 'text-red-600 animate-pulse' : 'text-black'
+                        }`}>
+                            {isSpinning && spinnerSeq ? spinnerSeq[spinnerIndex] : lastRuns}
                         </div>
                     </div>
-                    <div className="mt-2 text-gray-600 text-sm">{winner ? 'Click any to restart!' : 'Choose a hit for next ball'}</div>
-                    {winner && (
-                    <div className="mt-2 text-center">
-                        {isSaving && (
-                            <div className="text-blue-600 text-sm font-medium">
-                                Saving match...
-                            </div>
+
+                    {/* Game Controls */}
+                    <div className="flex flex-col items-center gap-4">
+                        <button
+                            onClick={() => handleMatch()}
+                            disabled={isAnimating}
+                            className={`bg-yellow-400 hover:bg-yellow-300 
+                                disabled:opacity-50 text-black font-bold 
+                                py-6 px-16 rounded text-4xl shadow-lg 
+                                transition-all duration-300 ease-out
+                                ${isAnimating ? 'scale-95' : ''}`}
+                        >
+                            {isSpinning ? 'Stop' : (winner ? 'Play Again' : 'Play')}
+                        </button>
+                        
+                        {/* Match Status Messages */}
+                        {winner && (
+                        <div className="text-center bg-black bg-opacity-75 rounded px-6 py-3 mt-2">
+                            {isSaving && <div className="text-white text-lg">Saving match...</div>}
+                            {matchSaved && !saveError && <div className="text-white text-lg">✓ Match saved!</div>}
+                            {saveError && (
+                                <div className="text-white text-lg">
+                                    {saveError}
+                                    <button onClick={handleSaveMatch} className="ml-2 underline">
+                                        Retry
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                         )}
-                        {matchSaved && !saveError && (
-                            <div className="text-green-600 text-sm font-semibold">
-                                ✓ Match saved successfully!
-                            </div>
-                        )}
-                        {saveError && (
-                            <div className="text-red-600 text-sm">
-                                {saveError}
-                                <button
-                                    onClick={handleSaveMatch}
-                                    className="ml-2 underline hover:text-red-700"
-                                >
-                                    Retry
-                                </button>
-                            </div>
-                        )}
+
+                        <button
+                            onClick={() => navigate('/menu')}
+                            className="bg-gray-800 hover:bg-gray-700 
+                                text-white font-bold py-4 px-10 
+                                rounded text-xl transition-colors 
+                                duration-300 mt-4"
+                        >
+                            Back to Menu
+                        </button>
                     </div>
-                )}
-                    <button
-                        onClick={() => navigate('/menu')}
-                        className="mt-4 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded text-sm transition-all"
-                    >
-                        Back to Menu
-                    </button>
                 </div>
             </div>
             <footer className="absolute bottom-0 right-0 p-4">
