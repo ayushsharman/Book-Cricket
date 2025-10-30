@@ -127,8 +127,9 @@ const Game = () => {
     };
 
     const handleMeterStop = (score: string) => {
-        setLastRuns(score);
         setIsMeterAnimating(false);
+        setIsAnimating(false);
+        setLastRuns(score);
 
         // Determine animation type
         if (score === '4' || score === '6') {
