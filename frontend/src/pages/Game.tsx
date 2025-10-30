@@ -58,6 +58,7 @@ const Game = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [matchSaved, setMatchSaved] = useState(false);
+    const stopMeterRef = useRef<(() => void) | null>(null);
 
     useEffect(() => {
         if (gameSettings?.maxOvers && gameSettings?.maxWickets) {
@@ -127,9 +128,8 @@ const Game = () => {
     };
 
     const handleMeterStop = (score: string) => {
-        setIsMeterAnimating(false);
-        setIsAnimating(false);
         setLastRuns(score);
+        setIsMeterAnimating(false);
 
         // Determine animation type
         if (score === '4' || score === '6') {
@@ -153,8 +153,14 @@ const Game = () => {
             return;
         }
 
-        setIsMeterAnimating(true);
-        setIsAnimating(true);
+        if (isMeterAnimating) {
+            // Stop the meter
+            setIsMeterAnimating(false);
+        } else {
+            // Start the meter
+            setIsMeterAnimating(true);
+            setIsAnimating(true);
+        }
     };
 
     function handleMatchResolve(runValue: string) {
@@ -405,7 +411,7 @@ const Game = () => {
                     <MeterUI
                         isAnimating={isMeterAnimating}
                         onStop={handleMeterStop}
-                        disabled={isAnimating || !!winner}
+                        disabled={!!winner}
                     />
 
                     <div className="flex flex-col items-center gap-4">

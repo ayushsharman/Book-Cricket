@@ -7,17 +7,17 @@
  */
 
 export const METER_REGIONS = [
-  { label: '1', start: 0, end: 10, weight: 1 },
-  { label: '2', start: 10, end: 20, weight: 2 },
-  { label: '3', start: 20, end: 30, weight: 3 },
-  { label: '4', start: 30, end: 40, weight: 4 },
-  { label: '6', start: 40, end: 45, weight: 6 },
-  { label: 'W', start: 45, end: 55, weight: 0 }, // Wicket (center)
-  { label: '6', start: 55, end: 60, weight: 6 },
-  { label: '4', start: 60, end: 70, weight: 4 },
-  { label: '3', start: 70, end: 80, weight: 3 },
-  { label: '2', start: 80, end: 90, weight: 2 },
-  { label: '1', start: 90, end: 100, weight: 1 },
+  { label: '1', start: 0, end: 9.09, weight: 1 },
+  { label: '2', start: 9.09, end: 18.18, weight: 2 },
+  { label: '3', start: 18.18, end: 27.27, weight: 3 },
+  { label: '4', start: 27.27, end: 36.36, weight: 4 },
+  { label: '6', start: 36.36, end: 40.91, weight: 6 },
+  { label: 'W', start: 40.91, end: 50, weight: 0 }, // Wicket (center)
+  { label: '6', start: 50, end: 59.09, weight: 6 },
+  { label: '4', start: 59.09, end: 68.18, weight: 4 },
+  { label: '3', start: 68.18, end: 77.27, weight: 3 },
+  { label: '2', start: 77.27, end: 86.82, weight: 2 },
+  { label: '1', start: 86.82, end: 100, weight: 1 },
 ];
 
 /**
