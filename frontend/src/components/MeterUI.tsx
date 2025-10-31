@@ -74,6 +74,19 @@ const MeterUI: React.FC<MeterUIProps> = ({ isAnimating, onStop, disabled = false
     }
   }, [isAnimating]);
 
+  // If parent toggles `isAnimating` from true -> false (e.g. user clicked stop
+  // in the game UI), notify parent with the final score. We track the
+  // previous value to avoid calling on mount.
+  const prevAnimatingRef = useRef<boolean>(isAnimating);
+  useEffect(() => {
+    if (prevAnimatingRef.current && !isAnimating) {
+      const finalScore = getScoreFromPosition(positionRef.current);
+      setDisplayScore(finalScore);
+      onStop(finalScore);
+    }
+    prevAnimatingRef.current = isAnimating;
+  }, [isAnimating, onStop]);
+
   const getRegionColor = (label: string): string => {
     switch (label) {
       case '1':

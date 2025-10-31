@@ -129,7 +129,9 @@ const Game = () => {
 
     const handleMeterStop = (score: string) => {
         setLastRuns(score);
+        console.log(score);
         setIsMeterAnimating(false);
+        console.log('Meter stopped at score:', score);
 
         // Determine animation type
         if (score === '4' || score === '6') {
@@ -157,9 +159,11 @@ const Game = () => {
             // Stop the meter
             setIsMeterAnimating(false);
         } else {
-            // Start the meter
+            // Start the meter. Do not set `isAnimating` here — that's used for
+            // boundary/wicket visual animations. Keeping it false keeps the
+            // Play/Stop button enabled while the meter runs.
             setIsMeterAnimating(true);
-            setIsAnimating(true);
+            setIsAnimating(false);
         }
     };
 
@@ -417,7 +421,8 @@ const Game = () => {
                     <div className="flex flex-col items-center gap-4">
                         <button
                             onClick={handlePlayClick}
-                            disabled={isAnimating || isMeterAnimating}
+                            /* Allow stopping while the meter is running. Only disable during other animations. */
+                            disabled={isAnimating}
                             className={`bg-yellow-400 hover:bg-yellow-300 
                                 disabled:opacity-50 text-black font-bold 
                                 py-6 px-16 rounded text-4xl shadow-lg 
