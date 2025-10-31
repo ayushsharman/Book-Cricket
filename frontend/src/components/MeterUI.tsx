@@ -114,19 +114,28 @@ const MeterUI: React.FC<MeterUIProps> = ({ isAnimating, onStop, disabled = false
       <div className="relative bg-black rounded-lg overflow-hidden shadow-2xl">
         {/* Meter Bar */}
         <div className="relative h-20 flex">
-          {METER_REGIONS.map((region, idx) => (
-            <div
-              key={`${region.label}-${idx}`}
-              className={`flex-1 flex items-center justify-center text-white font-bold text-sm ${
-                getRegionColor(region.label)
-              }`}
-              style={{
-                flex: region.end - region.start,
-              }}
-            >
-              {region.label}
-            </div>
-          ))}
+          {METER_REGIONS.map((region, idx) => {
+            // Adjust label sizes: increase for '1' and '2', decrease for '3'
+            const labelSizeClass = region.label === '1' || region.label === '2'
+              ? 'text-xl'
+              : region.label === '3'
+                ? 'text-xs'
+                : 'text-sm';
+
+            return (
+              <div
+                key={`${region.label}-${idx}`}
+                className={`flex-1 flex items-center justify-center text-white font-bold ${labelSizeClass} ${
+                  getRegionColor(region.label)
+                }`}
+                style={{
+                  flex: region.end - region.start,
+                }}
+              >
+                <span className="drop-shadow-md">{region.label}</span>
+              </div>
+            );
+          })}
         </div>
 
         {/* Needle/Indicator - smooth transition */}

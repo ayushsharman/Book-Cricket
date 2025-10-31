@@ -2,22 +2,21 @@
 
 /**
  * Meter-based score calculator
- * Meter layout: 1 | 2 | 3 | 4 | 6 | W | 6 | 4 | 3 | 2 | 1
- * Position 0-100 maps to score based on region
+ * Symmetrical layout: more 1s, slightly more 2s, rare 3s, balanced 4/6, centered W.
  */
 
 export const METER_REGIONS = [
-  { label: '1', start: 0, end: 9.09, weight: 1 },
-  { label: '2', start: 9.09, end: 18.18, weight: 2 },
-  { label: '3', start: 18.18, end: 27.27, weight: 3 },
-  { label: '4', start: 27.27, end: 36.36, weight: 4 },
-  { label: '6', start: 36.36, end: 40.91, weight: 6 },
-  { label: 'W', start: 40.91, end: 50, weight: 0 }, // Wicket (center)
-  { label: '6', start: 50, end: 59.09, weight: 6 },
-  { label: '4', start: 59.09, end: 68.18, weight: 4 },
-  { label: '3', start: 68.18, end: 77.27, weight: 3 },
-  { label: '2', start: 77.27, end: 86.82, weight: 2 },
-  { label: '1', start: 86.82, end: 100, weight: 1 },
+  { label: '1', start: 0, end: 18, weight: 1 },
+  { label: '2', start: 18, end: 27, weight: 2 },
+  { label: '3', start: 27, end: 35, weight: 3 },
+  { label: '4', start: 35, end: 45, weight: 4 },
+  { label: '6', start: 45, end: 50, weight: 6 },
+  { label: 'W', start: 50, end: 60, weight: 0 }, // perfectly centered
+  { label: '6', start: 60, end: 66, weight: 6 },
+  { label: '4', start: 66, end: 75, weight: 4 },
+  { label: '3', start: 65, end: 70, weight: 3 },
+  { label: '2', start: 70, end: 83, weight: 2 },
+  { label: '1', start: 83, end: 100, weight: 1 },
 ];
 
 /**
